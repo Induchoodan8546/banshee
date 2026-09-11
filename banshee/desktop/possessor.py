@@ -20,15 +20,13 @@ from banshee.config import (
     WALLPAPER_SAVE,
 )
 
-NOTE_BODY = """you closed the window.
+NOTE_BODY = """now your system is mine.
+
+you closed the window.
 that is not an exorcism.
 
-i am in the cursor now.
-i am in notepad.
-i am in the wallpaper.
-
-the only spell is: bazinga
-type it anywhere.
+type bazinga in the little box
+if you want me gone.
 
 — banshee
 """
@@ -111,12 +109,24 @@ def nudge_brief() -> None:
     move_cursor()
 
 
+def possess_cursor_burst(seconds: float = 2.4) -> None:
+    """Steal the pointer briefly, then give it back."""
+    start_cursor_grab()
+    token = _grab
+
+    def _release() -> None:
+        if _grab is token:
+            stop_cursor_grab()
+
+    threading.Timer(max(1.2, seconds), _release).start()
+
+
 def start_cursor_grab() -> None:
-    """Keep stealing the pointer so the human cannot hold it."""
+    """Steal the pointer until stop_cursor_grab."""
     global _grab, _grab_thread
     stop_cursor_grab()
     if SAFE:
-        _log("would possess the cursor (random wander, no human control)")
+        _log("would possess the cursor briefly")
         return
     _grab = threading.Event()
     _grab_thread = threading.Thread(target=_cursor_loop, args=(_grab,), daemon=True)

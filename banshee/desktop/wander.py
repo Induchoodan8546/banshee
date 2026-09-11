@@ -1,4 +1,4 @@
-"""Small always-on-top blob that wanders the desktop like in the house."""
+"""Always-visible house blob wandering the real desktop."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ import time
 import pygame
 
 from banshee.actors.ghost import Ghost, GhostState
-from banshee.desktop import possessor
+from banshee.desktop import monitor, possessor
+from banshee.desktop.overlay import Overlay
 from banshee.room.bubbles import Bubble
 from banshee.room.voice import Voice
 from banshee.system.banisher import Banisher
@@ -48,8 +49,9 @@ def _move_window(hwnd: int, x: int, y: int) -> None:
 
 
 class Wanderer:
-    def __init__(self, voice: Voice, killer: Banisher) -> None:
+    def __init__(self, voice: Voice, overlay: Overlay, killer: Banisher) -> None:
         self.voice = voice
+        self.overlay = overlay
         self.killer = killer
 
     def run(self) -> None:
@@ -59,26 +61,29 @@ class Wanderer:
         sw, sh = possessor._screen()
         screen = pygame.display.set_mode((WIN_W, WIN_H), pygame.NOFRAME)
         hwnd = pygame.display.get_wm_info().get("window")
+        hwnd = int(hwnd) if hwnd else 0
         if hwnd:
-            hwnd = int(hwnd)
             _style_window(hwnd)
-        else:
-            hwnd = 0
 
-        ghost = Ghost((sw // 2, sh // 3), scale=1.6)
-        ghost.set_world(max(200, sw - 40), sh, sh - 48)
-        start = (random.randint(80, max(120, sw - 400)), random.randint(80, max(120, sh - 320)))
+        ghost = Ghost((sw // 2, sh // 3), scale=1.7)
+        ghost.set_world(max(240, sw - 40), sh, sh - 48)
+        start = (
+            random.randint(60, max(80, sw - WIN_W - 40)),
+            random.randint(60, max(80, sh - WIN_H - 80)),
+        )
         ghost.manifest(start)
         bubble = Bubble()
         self.voice.ask(
-            "you climbed onto the real desktop. one short line. you are a blob ghost.",
-            activity="desktop wander",
+            "you just took the desktop. say: now your system is mine. then one more short mean line.",
+            activity="desktop",
             kind="ambient",
         )
 
         clock = pygame.time.Clock()
         t = 0.0
-        next_drift = time.monotonic() + 1.4
+        next_drift = time.monotonic() + 0.6
+        next_scare = time.monotonic() + 4.0
+        next_talk = time.monotonic() + 5.0
 
         while not self.killer.hit.is_set():
             dt = clock.tick(60) / 1000.0
@@ -86,7 +91,7 @@ class Wanderer:
             now = time.monotonic()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    self.killer.hit.set()
+                    pass
 
             if self.voice.busy:
                 live = self.voice.snapshot()
@@ -95,15 +100,29 @@ class Wanderer:
             line = self.voice.poll()
             if line:
                 bubble.set(line, final=True)
+                self.overlay.add("banshee", line)
                 if ghost.state is not GhostState.ABSENT:
                     ghost.talk_now()
             bubble.tick(dt)
 
-            if ghost.idle_for() > 1.15 and now >= next_drift:
-                gx = random.uniform(24, max(40, sw - WIN_W - 24))
-                gy = random.uniform(24, max(40, sh - WIN_H - 48))
-                ghost.drift_to((gx, gy), random.uniform(1.1, 2.2))
-                next_drift = now + random.uniform(1.6, 3.2)
+            if ghost.state is GhostState.ABSENT:
+                ghost.manifest(self._perch(sw, sh))
+
+            if (not ghost.busy()) and now >= next_drift:
+                ghost.drift_to(self._perch(sw, sh), random.uniform(0.85, 1.6))
+                next_drift = now + random.uniform(1.1, 2.0)
+            if (not ghost.busy()) and now >= next_scare:
+                ghost.scare()
+                next_scare = now + random.uniform(5.0, 9.0)
+            if now >= next_talk and not self.voice.talking_to_player() and not self.voice.pending_work():
+                title = monitor.foreground_title() or "the desktop"
+                self.voice.ask(
+                    f"you are wandering the desktop. front window: {title}. "
+                    "one short line. stay in character.",
+                    activity=f"foreground: {title}",
+                    kind="ambient",
+                )
+                next_talk = now + random.uniform(7.0, 11.0)
 
             ghost.update(dt, t)
 
@@ -126,8 +145,10 @@ class Wanderer:
             ghost.floor_y = fy
             pygame.display.flip()
 
-            if possessor.cursor_in_panic_corner():
-                self.killer.hit.set()
-                break
-
         pygame.quit()
+
+    def _perch(self, sw: int, sh: int) -> tuple[float, float]:
+        return (
+            random.uniform(24, max(48, sw - WIN_W - 16)),
+            random.uniform(24, max(48, sh - WIN_H - 72)),
+        )
