@@ -47,3 +47,9 @@ ALLOWED_APPS = {
     "calculator": "calc.exe",
     "paint": "mspaint.exe",
 }
+SEARCH_URLS = [
+    "https://www.google.com/search?q=how+to+remove+a+cartoon+ghost+from+windows",
+    "https://www.google.com/search?q=is+my+cursor+haunted",
+    "https://www.google.com/search?q=bazinga+exorcism+spell",
+]
+SIDEBAR_W = 300

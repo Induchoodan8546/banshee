@@ -94,6 +94,23 @@ def move_cursor(dx: int | None = None, dy: int | None = None) -> None:
         time.sleep(0.01)
 
 
+def open_search() -> None:
+    from banshee.config import SEARCH_URLS
+    import webbrowser
+
+    url = random.choice(SEARCH_URLS)
+    if SAFE:
+        _log(f"would open search {url}")
+        return
+    webbrowser.open(url)
+    _log("opened a haunted search")
+
+
+def nudge_brief() -> None:
+    """One short yank. Cursor is then the human's again."""
+    move_cursor()
+
+
 def start_cursor_grab() -> None:
     """Keep stealing the pointer so the human cannot hold it."""
     global _grab, _grab_thread

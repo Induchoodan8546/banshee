@@ -87,7 +87,14 @@ class Bubble:
         self.text = ""
         self._hold = 0.0
         self._queue: list[str] = []
-        self.font = pygame.font.SysFont("consolas", 16)
+        self.font: pygame.font.Font | None = None
+
+    def _ensure_font(self) -> pygame.font.Font:
+        if self.font is None:
+            if not pygame.font.get_init():
+                pygame.font.init()
+            self.font = pygame.font.SysFont("consolas", 16)
+        return self.font
 
     def set(self, text: str, *, final: bool = False) -> None:
         text = text.replace("\n", " ").strip()
@@ -119,17 +126,19 @@ class Bubble:
     def draw(self, surf: pygame.Surface, ghost: Ghost) -> None:
         if not self.text or (self._hold <= 0 and not self._queue):
             return
-        lines = wrap_words(self.font, self.text, WRAP_PX)[:MAX_LINES]
+        font = self._ensure_font()
+        lines = wrap_words(font, self.text, WRAP_PX)[:MAX_LINES]
         if not lines:
             return
         pads = 8
-        widths = [self.font.size(line)[0] for line in lines]
+        widths = [font.size(line)[0] for line in lines]
         bw = min(WRAP_PX + pads * 2, max(widths) + pads * 2)
         bh = len(lines) * 18 + pads * 2
+        max_w, max_h = surf.get_width(), surf.get_height()
         x = int(ghost.x + ghost.w / 2 - bw / 2)
         y = int(ghost.y) - bh - 12
-        x = max(6, min(ROOM_W - bw - 6, x))
-        y = max(4, min(ROOM_H - bh - 40, y))
+        x = max(6, min(max_w - bw - 6, x))
+        y = max(4, min(max_h - bh - 8, y))
         box = pygame.Rect(x, y, bw, bh)
         pygame.draw.rect(surf, FILL, box, border_radius=6)
         pygame.draw.rect(surf, LILAC, box, 2, border_radius=6)
@@ -140,5 +149,5 @@ class Bubble:
             [(tip_x - 6, y + bh), (tip_x + 6, y + bh), (tip_x, y + bh + 8)],
         )
         for i, line in enumerate(lines):
-            label = self.font.render(line, True, INK)
+            label = font.render(line, True, INK)
             surf.blit(label, (x + pads, y + pads + i * 18))

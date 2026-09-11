@@ -8,7 +8,7 @@ from enum import Enum
 import pygame
 
 from banshee.actors import motion
-from banshee.config import ASSETS_GHOST, FLOOR_Y, ROOM_W
+from banshee.config import ASSETS_GHOST, FLOOR_Y, ROOM_H, ROOM_W
 
 
 class GhostState(str, Enum):
@@ -28,9 +28,9 @@ def _load(name: str) -> pygame.Surface:
 
 
 class Ghost:
-    def __init__(self, manifest_xy: tuple[float, float]) -> None:
+    def __init__(self, manifest_xy: tuple[float, float], scale: float = 1.35) -> None:
         body = _load("body.png")
-        bw, bh = int(body.get_width() * 1.35), int(body.get_height() * 1.35)
+        bw, bh = int(body.get_width() * scale), int(body.get_height() * scale)
         self.body = pygame.transform.scale(body, (bw, bh))
         self.blink = pygame.transform.scale(_load("eyes_closed.png"), (bw, bh))
         self.talk = pygame.transform.scale(_load("mouth_talk.png"), (bw, bh))
@@ -57,6 +57,14 @@ class Ghost:
         self._pending_hide = False
         self._peek_pos = self.home
         self._vanish_to = self.home
+        self.world_w = ROOM_W
+        self.world_h = ROOM_H
+        self.floor_y = FLOOR_Y
+
+    def set_world(self, width: int, height: int, floor_y: int) -> None:
+        self.world_w = width
+        self.world_h = height
+        self.floor_y = floor_y
 
     @property
     def w(self) -> int:
@@ -90,8 +98,8 @@ class Ghost:
         return 0.0
 
     def clamp_pos(self) -> None:
-        self.x = motion.clamp(self.x, 6, ROOM_W - self.w - 6)
-        self.y = motion.clamp(self.y, 24, FLOOR_Y - self.h + 12)
+        self.x = motion.clamp(self.x, 6, self.world_w - self.w - 6)
+        self.y = motion.clamp(self.y, 24, self.floor_y - self.h + 12)
 
     def manifest(self, xy: tuple[float, float] | None = None) -> None:
         if xy:
@@ -267,7 +275,7 @@ class Ghost:
         sh = max(10, img.get_height())
         scaled = pygame.transform.scale(img, (sw, sh))
         scaled.set_alpha(140)
-        rect = scaled.get_rect(center=(int(self._lag.x), FLOOR_Y))
+        rect = scaled.get_rect(center=(int(self._lag.x), int(self.floor_y)))
         surf.blit(scaled, rect)
 
     def draw(self, surf: pygame.Surface) -> None:
