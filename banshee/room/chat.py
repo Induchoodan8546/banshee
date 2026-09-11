@@ -5,6 +5,7 @@ from __future__ import annotations
 import pygame
 
 from banshee.config import CHAT_DOCK_H, ROOM_H, WINDOW_W
+from banshee.room.bubbles import wrap_words
 
 BG = (22, 14, 36)
 LINE = (90, 62, 120)
@@ -74,9 +75,11 @@ class ChatDock:
         for who, text in self.log:
             color = CREAM if who == "you" else LILAC
             prefix = "you: " if who == "you" else "banshee: "
-            label = self.small.render((prefix + text)[:92], True, color)
-            surf.blit(label, (12, y))
-            y += 18
+            wrapped = wrap_words(self.small, prefix + text, WINDOW_W - 28)
+            for i, line in enumerate(wrapped[:2]):
+                surf.blit(self.small.render(line, True, color), (12, y))
+                y += 16
+            y += 2
         field = pygame.Rect(10, ROOM_H + CHAT_DOCK_H - 36, WINDOW_W - 20, 26)
         pygame.draw.rect(surf, (12, 8, 22), field, border_radius=4)
         pygame.draw.rect(surf, LINE if self.focus else (50, 36, 70), field, 1, border_radius=4)

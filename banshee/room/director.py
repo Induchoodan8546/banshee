@@ -8,6 +8,7 @@ from enum import Enum
 from banshee.actors.ghost import Ghost, GhostState
 from banshee.actors.shade import Shade, ShadeKind
 from banshee.room.props import Props
+from banshee.room.bubbles import Bubble
 from banshee.room.voice import Voice
 from banshee.room.whispers import Whispers
 
@@ -27,12 +28,14 @@ class Director:
         shade: Shade,
         whispers: Whispers,
         voice: Voice,
+        bubble: Bubble,
     ) -> None:
         self.props = props
         self.ghost = ghost
         self.shade = shade
         self.whispers = whispers
         self.voice = voice
+        self.bubble = bubble
         self.act = Act.UNEASE
         self.t = 0.0
         self.act_t = 0.0
@@ -53,11 +56,14 @@ class Director:
         if self.act is Act.UNEASE and self.interacts >= 1:
             self._to(Act.SHADOWS)
         if self.here() and kind in ("open", "close", "poke", "drag", "lamp"):
+            if self.voice.talking_to_player() or self.voice.pending_work():
+                return
             snap = detail or kind
             self.voice.ask(
                 f"the human just did this in your bedroom: {snap}. "
                 "one short comment. do not be helpful.",
                 activity=snap,
+                kind="ambient",
             )
 
     def _fire(self, name: str) -> bool:
@@ -125,11 +131,13 @@ class Director:
                 "the human looked too long. you just manifested in the bedroom. "
                 "first words. 1 or 2 short sentences. you are pleased they noticed.",
                 activity="ghost just appeared",
+                kind="ambient",
             )
         if self.ghost.state is GhostState.IDLE and self.act_t > 1.4:
             self.props.unease_rock = False
             self._to(Act.HAUNT)
             self._haunt_cd = 0.3
+            self._mutter_cd = 10.0
 
     def _random_spawn(self) -> tuple[float, float]:
         wr = self.props.items["wardrobe"]
@@ -152,14 +160,18 @@ class Director:
         self._mutter_cd -= dt
         if (
             self._mutter_cd <= 0
-            and not self.voice.busy
+            and not self.voice.pending_work()
+            and not self.bubble.blocking()
             and self.ghost.state is not GhostState.ABSENT
         ):
             self._mutter_cd = random.uniform(7.0, 12.0)
+            if self.voice.talking_to_player():
+                return
             self.voice.ask(
                 "you are haunting on your own. mutter one short line about this room "
                 "or the human. do not greet. do not ask a question.",
                 activity="idle haunt",
+                kind="ambient",
             )
         if self.ghost.busy():
             return
@@ -170,8 +182,8 @@ class Director:
             return
         self._haunt_cd = random.uniform(1.1, 2.0)
         action = random.choices(
-            ("drift", "hide", "vanish", "scare", "knock", "flicker", "nudge", "open"),
-            weights=(36, 14, 14, 10, 8, 8, 6, 4),
+            ("drift", "hide", "scare", "knock", "flicker", "nudge", "open"),
+            weights=(44, 16, 12, 8, 8, 7, 5),
             k=1,
         )[0]
         self._do(action)

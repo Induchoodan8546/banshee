@@ -100,7 +100,7 @@ class Ghost:
         self._to = self.home
         self.state = GhostState.MANIFEST
         self._state_t = 0.0
-        self.alpha = 0
+        self.alpha = 255
         self._pending_hide = False
         self.hidden_behind = None
         self.clamp_pos()
@@ -142,12 +142,11 @@ class Ghost:
         self.alpha = 255
 
     def vanish_to(self, xy: tuple[float, float]) -> None:
+        """Relocate without going invisible — a fast drift, not a fade."""
         if self.state is GhostState.ABSENT:
             return
-        self._vanish_to = (float(xy[0]), float(xy[1]))
-        self.state = GhostState.VANISH
-        self._state_t = 0.0
-        self.hidden_behind = None
+        self.alpha = 255
+        self.drift_to(xy, 0.45)
 
     def update(self, dt: float, now: float) -> None:
         if self.state is GhostState.ABSENT:
@@ -161,10 +160,12 @@ class Ghost:
             self._blink_left -= dt
         self.hover, self.squash = motion.breathe_px(now)
 
+        if self.state is not GhostState.ABSENT:
+            self.alpha = 255
         if self.state is GhostState.MANIFEST:
             self._tick_manifest()
         elif self.state is GhostState.IDLE:
-            self.alpha = 255
+            pass
         elif self.state is GhostState.DRIFT:
             self._tick_drift()
         elif self.state is GhostState.HIDE:
@@ -174,25 +175,23 @@ class Ghost:
         elif self.state is GhostState.SCARE:
             self._tick_scare()
         elif self.state is GhostState.TALK:
-            self.alpha = 255
-            if self._state_t > 1.3:
+            if self._state_t > 6.0:
                 self.state = GhostState.IDLE
                 self._state_t = 0.0
         elif self.state is GhostState.VANISH:
-            self._tick_vanish()
+            self.drift_to(self._vanish_to, 0.45)
 
         self.clamp_pos()
         self._lag.push(now, self.x + self.w / 2, self.y)
 
     def _tick_manifest(self) -> None:
-        t = motion.clamp(self._state_t / 1.2, 0.0, 1.0)
-        self.alpha = int(255 * t)
-        drop = motion.lerp(-16.0, 0.0, motion.ease_out_back(t))
+        t = motion.clamp(self._state_t / 0.7, 0.0, 1.0)
+        self.alpha = 255
+        drop = motion.lerp(-12.0, 0.0, motion.ease_out_back(t))
         self.y = self.home[1] + drop
         self.x = self.home[0]
-        self.squash = 4 if t > 0.75 else -2
+        self.squash = 5 if t > 0.7 else -2
         if t >= 1.0:
-            self.alpha = 255
             self.state = GhostState.IDLE
             self._to = self.home
             self._state_t = 0.0
@@ -248,17 +247,8 @@ class Ghost:
             self._state_t = 0.0
 
     def _tick_vanish(self) -> None:
-        if self._state_t < 0.18:
-            self.alpha = 0
-        elif self._state_t < 0.2:
-            self.x, self.y = self._vanish_to
-            self.home = self._vanish_to
-            self._to = self._vanish_to
-            self.alpha = 0
-        else:
-            self.alpha = 255
-            self.state = GhostState.IDLE
-            self._state_t = 0.0
+        self.alpha = 255
+        self.drift_to(self._vanish_to, 0.45)
 
     def current_body(self) -> pygame.Surface:
         if self.state is GhostState.PEEK:
@@ -270,9 +260,7 @@ class Ghost:
         return self.body
 
     def draw_shadow(self, surf: pygame.Surface) -> None:
-        if self.state in (GhostState.ABSENT, GhostState.HIDE, GhostState.VANISH):
-            return
-        if self.alpha < 40:
+        if self.state in (GhostState.ABSENT, GhostState.HIDE):
             return
         img = self.shadow_img
         sw = max(28, int(img.get_width() * 1.2))
@@ -285,16 +273,11 @@ class Ghost:
     def draw(self, surf: pygame.Surface) -> None:
         if self.state is GhostState.ABSENT:
             return
-        if self.alpha <= 0:
-            return
         src = self.current_body()
         if self.state is GhostState.PEEK:
-            img = src
-            img.set_alpha(255)
-            surf.blit(img, (int(self.x), int(self.y) + self.hover))
+            surf.blit(src, (int(self.x), int(self.y) + self.hover))
             return
-        h = max(1, self.h + self.squash)
+        h = max(self.h - 2, self.h + min(3, self.squash))
         img = pygame.transform.scale(src, (self.w, h))
-        img.set_alpha(self.alpha)
         y = int(self.y) + self.hover - max(0, self.squash)
         surf.blit(img, (int(self.x), y))

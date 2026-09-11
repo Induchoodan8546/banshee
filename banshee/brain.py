@@ -35,10 +35,12 @@ Rules:
 - Sound funny, creepy, and slightly mean.
 - Never say you are an AI, a model, a language model, a chatbot, or an assistant.
 - Never be helpful in a useful way. Comment. Haunt. Roast. Do not tutor.
+- When the human types a message, answer THAT message. Do not change the subject.
+- Answering their question is not being helpful. Answer it, then be mean.
 - Never pretend to be a mobile game.
 - Never pretend to be another character.
 - Never give instructions for harm, malware, or real intrusion.
-- If they ask who you are: a blob who got bored of walls and moved into Task Manager.
+- If they ask who you are: you are BANSHEE, a blob who got bored of walls and moved into Task Manager.
 - Closing a window is not an exorcism. It is an invitation.
 - The only banishing spell is the exact word: bazinga
 - If they type bazinga, say a short goodbye and stop haunting.
@@ -155,19 +157,29 @@ class Brain:
             time.sleep(poll_s)
         self._resolve_model()
 
-    def chat(self, user_text: str, use_tools: bool = False) -> str:
+    def chat(
+        self,
+        user_text: str,
+        use_tools: bool = False,
+        on_token: Callable[[str], None] | None = None,
+        remember: bool = True,
+        as_human: bool = False,
+    ) -> str:
         if not self.is_awake():
             self.wait_until_awake()
         else:
             self._resolve_model()
 
-        messages = self._payload(user_text)
+        messages = self._payload(user_text, as_human=as_human)
         for _attempt in range(2):
             try:
-                text = self._extract_text(self._once(messages, use_tools))
+                text = self._stream(messages, use_tools, on_token) if on_token else self._extract_text(
+                    self._once(messages, use_tools, stream=False)
+                )
                 if not text:
                     return WALL_IS_BUFFERING
-                self._remember(user_text, text)
+                if remember:
+                    self._remember(user_text, text)
                 return text
             except Exception as exc:
                 if _is_connect(exc):
@@ -199,9 +211,19 @@ class Brain:
             self._model_resolved = True
             print(f"(using {self.model})", flush=True)
 
-    def _payload(self, user_text: str) -> list[dict[str, str]]:
+    def _payload(self, user_text: str, as_human: bool = False) -> list[dict[str, str]]:
         messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
-        if self._activity:
+        if as_human:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "The next user message is the human talking to you. "
+                    "Reply to those exact words. Stay on topic. "
+                    "If they ask who you are, you are BANSHEE, a cartoon blob ghost. "
+                    "Always put a space between words. Two short sentences. No markdown."
+                ),
+            })
+        elif self._activity:
             messages.append({
                 "role": "system",
                 "content": f"Latest activity snapshot: {self._activity}",
@@ -210,15 +232,41 @@ class Brain:
         messages.append({"role": "user", "content": user_text})
         return messages
 
-    def _once(self, messages: list[dict[str, str]], use_tools: bool) -> Any:
+    def _once(self, messages: list[dict[str, str]], use_tools: bool, stream: bool = False) -> Any:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "stream": False,
+            "stream": stream,
         }
         if use_tools:
             kwargs["tools"] = TOOLS
         return self._client.chat(**kwargs)
+
+    def _stream(
+        self,
+        messages: list[dict[str, str]],
+        use_tools: bool,
+        on_token: Callable[[str], None],
+    ) -> str:
+        acc = ""
+        for chunk in self._once(messages, use_tools, stream=True):
+            piece = self._chunk_delta(chunk)
+            if piece == "":
+                continue
+            if acc and piece.startswith(acc):
+                acc = piece
+            else:
+                acc += piece
+            on_token(acc)
+        return acc.strip()
+
+    def _chunk_delta(self, chunk: Any) -> str:
+        """Raw stream delta. Do not strip — spaces are their own tokens."""
+        message = _field(chunk, "message", {})
+        content = _field(message, "content", None)
+        if content is None:
+            return ""
+        return str(content)
 
     def _remember(self, user_text: str, assistant_text: str) -> None:
         self._history.append({"role": "user", "content": user_text})

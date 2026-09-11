@@ -35,7 +35,7 @@ def run_house() -> int:
     voice = Voice()
     bubble = Bubble()
     chat = ChatDock()
-    director = Director(props, ghost, shade, whispers, voice)
+    director = Director(props, ghost, shade, whispers, voice, bubble)
 
     running = True
     now = 0.0
@@ -94,14 +94,12 @@ def run_house() -> int:
                         chat.add("you", sent)
                         if sent.lower() == KILL_SPELL:
                             voice.ask(
-                                "the human said bazinga. short goodbye. then stop haunting.",
+                                "bazinga",
                                 activity="bazinga",
+                                kind="player",
                             )
                         else:
-                            voice.ask(
-                                f'the human said: "{sent}". answer in 1-3 short sentences.',
-                                activity=f"player said: {sent}",
-                            )
+                            voice.ask(sent, activity="player", kind="player")
                     elif sent == "":
                         pass
                     elif event.key == pygame.K_ESCAPE and not chat.draft:
@@ -113,20 +111,21 @@ def run_house() -> int:
                     chat.focus = True
                     pygame.key.start_text_input()
 
+        if voice.busy:
+            live = voice.snapshot()
+            if live:
+                bubble.set(live, final=False)
         line = voice.poll()
         if line:
-            bubble.set(line)
+            bubble.set(line, final=True)
             chat.add("banshee", line)
             if ghost.state is not GhostState.ABSENT:
                 ghost.talk_now()
 
-        if director.act is Act.HAUNT and not chat.enabled:
+        if director.here() and not chat.enabled:
             chat.enabled = True
 
-        with voice._lock:
-            if voice.bubble:
-                bubble.set(voice.bubble)
-
+        bubble.tick(dt)
         director.update(dt)
         props.update(dt, now)
         shade.update(dt)
@@ -134,7 +133,7 @@ def run_house() -> int:
 
         blit_world(screen, bg, shade, props, ghost)
         whispers.draw(screen)
-        if director.here():
+        if ghost.state is not GhostState.ABSENT:
             bubble.draw(screen, ghost)
         chat.draw(screen, now)
         pygame.display.flip()
