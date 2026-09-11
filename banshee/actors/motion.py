@@ -17,7 +17,7 @@ def ease_in_out_cubic(t: float) -> float:
     return 1.0 - ((-2.0 * t + 2.0) ** 3) / 2.0
 
 
-def ease_out_back(t: float, overshoot: float = 1.35) -> float:
+def ease_out_back(t: float, overshoot: float = 1.12) -> float:
     t = clamp(t, 0.0, 1.0)
     s = overshoot
     t -= 1.0
@@ -28,12 +28,11 @@ def lerp(a: float, b: float, t: float) -> float:
     return a + (b - a) * t
 
 
-def breathe(now: float) -> tuple[float, float, float]:
-    wave = math.sin(now * 3.7)
-    squash_y = 1.0 + wave * 0.07
-    squash_x = 1.0 - wave * 0.045
-    hover = math.sin(now * 2.15) * 3.2
-    return squash_x, squash_y, hover
+def breathe_px(now: float) -> tuple[int, int]:
+    """Whole-pixel hover and squash. Fractional scale dissolves pixel art."""
+    hover = int(round(math.sin(now * 2.15) * 3.0))
+    squash = int(round(math.sin(now * 3.7) * 3.0))
+    return hover, squash
 
 
 class LagShadow:

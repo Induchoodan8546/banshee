@@ -1,23 +1,22 @@
 {
-  "window": [1248, 832],
-  "inner": [77, 70, 1171, 540],
-  "caption": [710, 726, 1140, 800],
-  "floor_y": 518,
-  "manifest": [620, 236],
+  "window": [1072, 596],
+  "inner": [0, 0, 1072, 596],
+  "floor_y": 510,
+  "manifest": [470, 280],
   "props": {
-    "wardrobe": {"x": 96, "y": 232, "z": 2, "hide": true},
-    "chair": {"x": 400, "y": 338, "z": 2, "hide": false},
-    "chest": {"x": 656, "y": 412, "z": 2, "hide": true},
-    "stool": {"x": 838, "y": 444, "z": 2, "hide": false},
-    "lamp": {"x": 1008, "y": 318, "z": 1, "hide": false},
-    "window": {"x": 900, "y": 128, "w": 200, "h": 170, "z": 0, "hide": false}
+    "wardrobe": {"x": 24, "y": 231, "z": 2, "hide": true},
+    "chair": {"x": 310, "y": 364, "z": 2, "hide": false, "drag": true},
+    "chest": {"x": 560, "y": 437, "z": 2, "hide": true},
+    "stool": {"x": 740, "y": 466, "z": 2, "hide": false, "drag": true},
+    "lamp": {"x": 920, "y": 313, "z": 1, "hide": false},
+    "window": {"x": 760, "y": 48, "w": 210, "h": 180, "z": 0, "hide": false}
   },
   "perches": {
-    "chair": [520, 300],
-    "chest": [730, 360],
-    "window": [930, 168],
-    "wardrobe": [455, 248],
-    "stool": [880, 390],
-    "lamp": [1040, 280]
+    "chair": [360, 250],
+    "chest": [590, 310],
+    "window": [790, 120],
+    "wardrobe": [200, 230],
+    "stool": [760, 340],
+    "lamp": [900, 240]
   }
 }

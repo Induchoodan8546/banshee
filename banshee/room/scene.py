@@ -1,19 +1,18 @@
-"""The one pygame bedroom. --house-only lives here."""
+"""The one pygame bedroom. --house-only. No TV bezel."""
 
 from __future__ import annotations
 
-import random
 import sys
 
 import pygame
 
-from banshee.actors.ghost import Ghost, GhostState
-from banshee.actors.shade import Shade, ShadeKind
+from banshee.actors.ghost import Ghost
+from banshee.actors.shade import Shade
 from banshee.config import ASSETS_ROOM, FPS, WINDOW_H, WINDOW_W
+from banshee.room.director import Director
 from banshee.room.layers import blit_world
 from banshee.room.props import Props
 from banshee.room.whispers import Whispers
-from banshee.state import Clock, Haunt
 
 
 def run_house() -> int:
@@ -29,30 +28,14 @@ def run_house() -> int:
     ghost = Ghost(props.manifest)
     shade = Shade()
     whispers = Whispers()
-    haunt = Clock()
+    director = Director(props, ghost, shade, whispers)
 
-    clicks = 0
-    fired: set[str] = set()
     running = True
     now = 0.0
-
-    def fire(name: str) -> bool:
-        if name in fired:
-            return False
-        fired.add(name)
-        return True
-
-    def start_manifest() -> None:
-        haunt.phase = Haunt.MANIFEST
-        haunt.skip_to(38.0)
-        ghost.manifest()
-        fire("manifest")
-        fire("t38")
 
     while running:
         dt = clock.tick(FPS) / 1000.0
         now += dt
-        haunt.tick(dt)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -60,62 +43,30 @@ def run_house() -> int:
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 running = False
             elif event.type == pygame.MOUSEMOTION:
+                if props.dragging:
+                    props.drag_to(event.pos)
                 pid = props.hit(event.pos)
-                props.hover_chair = pid == "chair"
                 if pid or ghost.contains(event.pos):
                     pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
                 else:
                     pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                props.end_drag()
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if ghost.contains(event.pos) and haunt.t >= 38.0:
+                if ghost.contains(event.pos):
                     ghost.scare()
+                    director.note_interact("poke")
                     continue
                 pid = props.hit(event.pos)
                 if not pid:
                     continue
-                if haunt.t < 38.0:
-                    clicks += 1
-                    if clicks >= 3:
-                        start_manifest()
-                else:
-                    perch = props.perches.get(pid, props.manifest)
-                    if pid in ("wardrobe", "chest"):
-                        ghost.hide_behind(pid, props.hide_slot(pid), props.peek_slot(pid))
-                    else:
-                        gx = perch[0] - ghost.w / 2
-                        gy = perch[1]
-                        ghost.drift_to((gx, gy))
+                if props.begin_drag(pid, event.pos):
+                    director.note_interact("drag")
+                    continue
+                kind = props.toggle(pid)
+                director.note_interact(kind)
 
-        t = haunt.t
-        if t >= 4.0 and fire("w1"):
-            whispers.set("dont close the window")
-        if t >= 8.0 and fire("slide"):
-            shade.spawn(ShadeKind.WALL_SLIDE)
-        if t >= 14.0 and fire("chest"):
-            props.tap_chest()
-        if t >= 22.0 and fire("w2"):
-            whispers.set("someone is in the wardrobe")
-        if t >= 26.0 and fire("crack"):
-            wr = props.items["wardrobe"]
-            shade.spawn(ShadeKind.DOOR_CRACK, {"x": wr.x + wr.w - 40, "y": wr.y + 80})
-        if t >= 32.0 and fire("false"):
-            ch = props.items["chair"]
-            shade.spawn(ShadeKind.FALSE_GHOST, {"x": ch.x - 10, "y": ch.y + 20})
-        if t >= 38.0 and fire("t38"):
-            start_manifest()
-        if t >= 40.0 and fire("line"):
-            whispers.set("you looked too long")
-            ghost.talk_now()
-
-        if (
-            haunt.t >= 41.0
-            and ghost.state is GhostState.IDLE
-            and ghost._state_t > 3.0
-        ):
-            name = random.choice(list(props.perches))
-            px, py = props.perches[name]
-            ghost.drift_to((px - ghost.w / 2, py), 1.05)
-
+        director.update(dt)
         props.update(dt, now)
         shade.update(dt)
         ghost.update(dt, now)

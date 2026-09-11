@@ -42,7 +42,7 @@ class Shade:
             self.dur = extra.get("dur", 3.2)
             img = self.images[kind]
             self.x = float(left - img.get_width())
-            self.y = float(extra.get("y", top + 70))
+            self.y = float(extra.get("y", top + 40))
             self._end_x = float(right + 8)
         elif kind is ShadeKind.UNDER_FURNITURE:
             self.dur = 2.4
