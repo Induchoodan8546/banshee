@@ -1,4 +1,4 @@
-"""Small bottom-right chat + tk root. Same process as the mascot."""
+"""Hidden Tk root + always-visible chat Toplevel. Mascot is a sibling window."""
 
 from __future__ import annotations
 
@@ -10,12 +10,13 @@ from banshee.desktop.mascot import DesktopMascot
 from banshee.room.voice import Voice
 from banshee.system.banisher import Banisher
 
-BOX_W, BOX_H = 280, 168
+BOX_W, BOX_H = 280, 176
 
 
 class Overlay:
     def __init__(self) -> None:
         self._root: tk.Tk | None = None
+        self._chat: tk.Toplevel | None = None
         self._log: tk.Text | None = None
         self._entry: tk.Entry | None = None
         self.voice: Voice | None = None
@@ -66,14 +67,14 @@ class Overlay:
 
     def seize_input(self) -> None:
         def _go() -> None:
-            self._pin()
-            root = self._root
-            if root is None:
+            self._pin_chat()
+            chat = self._chat
+            if chat is None:
                 return
             try:
-                root.deiconify()
-                root.lift()
-                root.focus_force()
+                chat.deiconify()
+                chat.lift()
+                chat.focus_force()
                 if self._entry is not None:
                     self._entry.focus_force()
                     self._entry.icursor("end")
@@ -89,13 +90,13 @@ class Overlay:
         self._on_ui(_go)
 
     def release_input(self) -> None:
-        self._on_ui(self._pin)
+        self._on_ui(self._pin_chat)
 
     def keep_front(self) -> None:
         def _go() -> None:
-            self._pin()
             if self.mascot is not None:
                 self.mascot.pin()
+            self._pin_chat()
 
         self._on_ui(_go)
 
@@ -110,10 +111,10 @@ class Overlay:
                 pass
 
     def run(self) -> None:
-        """Main-thread tk loop: chat + mascot together so both stay on top."""
         self._build()
         assert self._root is not None
         self.mascot = DesktopMascot(self._root)
+        self.add("banshee", "now your system is mine. type here.")
         self._root.after(30, self._tick)
         self._root.mainloop()
 
@@ -132,34 +133,38 @@ class Overlay:
                     self.mascot.talk()
         if self.mascot is not None:
             self.mascot.step()
-        self._pin()
+        self._pin_chat()
         root.after(33, self._tick)
 
     def _build(self) -> None:
         root = tk.Tk()
         self._root = root
-        root.title("BANSHEE")
-        root.configure(bg="#1a1028")
-        root.resizable(False, False)
-        root.attributes("-topmost", True)
-        sw = root.winfo_screenwidth()
-        sh = root.winfo_screenheight()
+        root.withdraw()
+
+        chat = tk.Toplevel(root)
+        self._chat = chat
+        chat.title("BANSHEE")
+        chat.configure(bg="#1a1028")
+        chat.resizable(False, False)
+        chat.attributes("-topmost", True)
+        sw = chat.winfo_screenwidth()
+        sh = chat.winfo_screenheight()
         x = max(8, sw - BOX_W - 16)
         y = max(8, sh - BOX_H - 56)
-        root.geometry(f"{BOX_W}x{BOX_H}+{x}+{y}")
-        root.protocol("WM_DELETE_WINDOW", self._on_close)
+        chat.geometry(f"{BOX_W}x{BOX_H}+{x}+{y}")
+        chat.protocol("WM_DELETE_WINDOW", self._on_close)
 
         tiny = tkfont.Font(family="Consolas", size=8)
         tk.Label(
-            root,
-            text=f"banshee  ·  type {KILL_SPELL} here to banish",
+            chat,
+            text=f"chat  ·  type {KILL_SPELL} here to banish",
             bg="#1a1028",
             fg="#9a7ab8",
             font=tiny,
         ).pack(anchor="w", padx=8, pady=(6, 0))
 
         self._log = tk.Text(
-            root,
+            chat,
             height=5,
             bg="#12081c",
             fg="#e8d4f0",
@@ -170,7 +175,7 @@ class Overlay:
         )
         self._log.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
-        row = tk.Frame(root, bg="#1a1028")
+        row = tk.Frame(chat, bg="#1a1028")
         row.pack(fill=tk.X, padx=8, pady=(0, 8))
         self._entry = tk.Entry(
             row,
@@ -190,16 +195,18 @@ class Overlay:
             relief="flat",
             font=tiny,
         ).pack(side=tk.LEFT, padx=(6, 0))
-        self._pin()
+        chat.update_idletasks()
+        self._pin_chat()
+        self._entry.focus_set()
 
-    def _pin(self) -> None:
-        root = self._root
-        if root is None or not self._alive:
+    def _pin_chat(self) -> None:
+        chat = self._chat
+        if chat is None or not self._alive:
             return
         try:
-            root.deiconify()
-            root.attributes("-topmost", True)
-            root.lift()
+            chat.deiconify()
+            chat.attributes("-topmost", True)
+            chat.lift()
         except tk.TclError:
             pass
 
@@ -220,17 +227,18 @@ class Overlay:
             self.voice.ask(text, activity="player", kind="player")
 
     def _on_close(self) -> None:
-        if not self._alive or self._root is None:
+        if not self._alive or self._chat is None:
             return
         self.add("banshee", "closing the x is cute. i am not a window.")
-        self._root.withdraw()
-        self._root.after(1500, self._come_back)
+        self._chat.withdraw()
+        if self._root is not None:
+            self._root.after(1500, self._come_back)
 
     def _come_back(self) -> None:
-        if not self._alive or self._root is None:
+        if not self._alive or self._chat is None:
             return
         try:
-            self._root.deiconify()
-            self._root.attributes("-topmost", True)
+            self._chat.deiconify()
+            self._pin_chat()
         except tk.TclError:
             pass

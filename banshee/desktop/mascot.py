@@ -1,7 +1,8 @@
-"""Always-on-top tk mascot — same toolkit as the chat box, so it stays visible."""
+"""Always-on-top ghost. Click-through so the chat box stays usable."""
 
 from __future__ import annotations
 
+import ctypes
 import math
 import random
 import time
@@ -11,6 +12,49 @@ from PIL import Image, ImageTk
 
 from banshee.config import ASSETS_GHOST
 from banshee.desktop import possessor
+
+GWL_EXSTYLE = -20
+WS_EX_LAYERED = 0x00080000
+WS_EX_TRANSPARENT = 0x00000020
+WS_EX_TOPMOST = 0x00000008
+WS_EX_NOACTIVATE = 0x08000000
+HWND_TOPMOST = -1
+SWP_NOMOVE = 0x0002
+SWP_NOSIZE = 0x0001
+SWP_NOACTIVATE = 0x0010
+SWP_SHOWWINDOW = 0x0040
+
+
+def _click_through(widget: tk.Misc) -> None:
+    try:
+        widget.update_idletasks()
+        user32 = ctypes.windll.user32
+        wid = int(widget.winfo_id())
+        parent = int(user32.GetParent(wid) or 0)
+        hwnd = parent or wid
+        if ctypes.sizeof(ctypes.c_void_p) == 8:
+            get_long = user32.GetWindowLongPtrW
+            set_long = user32.SetWindowLongPtrW
+        else:
+            get_long = user32.GetWindowLongW
+            set_long = user32.SetWindowLongW
+        style = get_long(hwnd, GWL_EXSTYLE)
+        set_long(
+            hwnd,
+            GWL_EXSTYLE,
+            style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+        )
+        user32.SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        )
+    except Exception:
+        pass
 
 
 class DesktopMascot:
@@ -59,6 +103,8 @@ class DesktopMascot:
             self.SIZE // 2 + 8,
             image=self._photos["body"],
         )
+        win.update_idletasks()
+        _click_through(win)
 
     def _load_frames(self) -> None:
         for name, file in (
@@ -77,7 +123,7 @@ class DesktopMascot:
     def pin(self) -> None:
         try:
             self.win.attributes("-topmost", True)
-            self.win.lift()
+            _click_through(self.win)
         except tk.TclError:
             pass
 
@@ -97,11 +143,9 @@ class DesktopMascot:
             self._pick_target()
             self._next_drift = now + random.uniform(1.2, 2.2)
 
-        # ease toward target
         self.x += (self.tx - self.x) * min(1.0, dt * 1.8)
         self.y += (self.ty - self.y) * min(1.0, dt * 1.8)
         bob = math.sin(self._t * 2.3) * 6.0
-        squash = 1.0 + math.sin(self._t * 3.6) * 0.04
 
         chat_x = self.vx + self.sw - 300
         chat_y = self.vy + self.sh - 220
@@ -110,7 +154,7 @@ class DesktopMascot:
         x = max(self.vx, min(self.vx + self.sw - self.SIZE, x))
         y = max(self.vy, min(self.vy + self.sh - self.SIZE - 40, y))
         if x > chat_x - 20 and y > chat_y - 20:
-            x = chat_x - self.SIZE - 8
+            x = int(chat_x - self.SIZE - 12)
 
         try:
             self.win.geometry(f"{self.SIZE}x{self.SIZE}+{x}+{y}")
@@ -122,8 +166,7 @@ class DesktopMascot:
             if kind != self._kind:
                 self._kind = kind
                 self.canvas.itemconfigure(self._sprite, image=self._photos[kind])
-            # slight breathe by moving image
-            self.canvas.coords(self._sprite, self.SIZE // 2, self.SIZE // 2 + 8 + squash * 2)
+            self.canvas.coords(self._sprite, self.SIZE // 2, self.SIZE // 2 + 8)
         except tk.TclError:
             pass
         self.pin()
