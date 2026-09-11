@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -17,6 +19,19 @@ from banshee.config import (
     SAFE,
     WALLPAPER_SAVE,
 )
+
+NOTE_BODY = """you closed the window.
+that is not an exorcism.
+
+i am in the cursor now.
+i am in notepad.
+i am in the wallpaper.
+
+the only spell is: bazinga
+type it anywhere.
+
+— banshee
+"""
 
 SPI_SETDESKWALLPAPER = 0x0014
 SPI_GETDESKWALLPAPER = 0x0073
@@ -55,36 +70,86 @@ def _set_cursor(x: int, y: int) -> None:
     _user32().SetCursorPos(int(x), int(y))
 
 
+_grab: threading.Event | None = None
+_grab_thread: threading.Thread | None = None
+
+
+def _screen() -> tuple[int, int]:
+    return _user32().GetSystemMetrics(0), _user32().GetSystemMetrics(1)
+
+
 def move_cursor(dx: int | None = None, dy: int | None = None) -> None:
-    dx = dx if dx is not None else random.randint(200, 400) * random.choice((-1, 1))
-    dy = dy if dy is not None else random.randint(80, 180) * random.choice((-1, 1))
+    dx = dx if dx is not None else random.randint(120, 280) * random.choice((-1, 1))
+    dy = dy if dy is not None else random.randint(60, 160) * random.choice((-1, 1))
     if SAFE:
-        _log(f"would drift cursor by ({dx}, {dy}) then return")
+        _log(f"would drift cursor by ({dx}, {dy})")
         return
     x0, y0 = _cursor()
-    sw, sh = _user32().GetSystemMetrics(0), _user32().GetSystemMetrics(1)
-    x1 = max(0, min(sw - 2, x0 + dx))
-    y1 = max(0, min(sh - 2, y0 + dy))
-    steps = 24
+    sw, sh = _screen()
+    x1 = max(8, min(sw - 8, x0 + dx))
+    y1 = max(8, min(sh - 8, y0 + dy))
+    steps = 18
     for i in range(1, steps + 1):
         _set_cursor(x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps)
-        time.sleep(0.012)
-    time.sleep(0.35)
-    for i in range(1, steps + 1):
-        _set_cursor(x1 + (x0 - x1) * i / steps, y1 + (y0 - y1) * i / steps)
-        time.sleep(0.012)
-    _set_cursor(x0, y0)
-    _log("cursor drifted and came home")
+        time.sleep(0.01)
+
+
+def start_cursor_grab() -> None:
+    """Keep stealing the pointer so the human cannot hold it."""
+    global _grab, _grab_thread
+    stop_cursor_grab()
+    if SAFE:
+        _log("would possess the cursor (random wander, no human control)")
+        return
+    _grab = threading.Event()
+    _grab_thread = threading.Thread(target=_cursor_loop, args=(_grab,), daemon=True)
+    _grab_thread.start()
+    _log("cursor possessed")
+
+
+def stop_cursor_grab() -> None:
+    global _grab, _grab_thread
+    if _grab is not None:
+        _grab.set()
+    if _grab_thread is not None:
+        _grab_thread.join(timeout=0.6)
+    _grab = None
+    _grab_thread = None
+
+
+def _cursor_loop(stop: threading.Event) -> None:
+    sw, sh = _screen()
+    tx, ty = _cursor()
+    angle = random.random() * math.tau
+    speed = 9.0
+    next_turn = time.monotonic()
+    while not stop.is_set():
+        now = time.monotonic()
+        if now >= next_turn:
+            angle += random.uniform(-1.2, 1.2)
+            speed = random.uniform(6.0, 16.0)
+            next_turn = now + random.uniform(0.35, 1.1)
+            # new wander target so it does not sit still
+            tx = max(20, min(sw - 20, tx + random.randint(-280, 280)))
+            ty = max(20, min(sh - 20, ty + random.randint(-180, 180)))
+        cx, cy = _cursor()
+        # yank back if the human fought the pointer
+        pull = 0.35
+        tx = tx + (cx - tx) * 0.04
+        x = cx + (tx - cx) * pull + math.cos(angle) * speed
+        y = cy + (ty - cy) * pull + math.sin(angle) * speed
+        x = max(2, min(sw - 3, x))
+        y = max(2, min(sh - 3, y))
+        # keep panic corner reachable: never park in 0,0 ourselves
+        if x < 28 and y < 28:
+            x, y = 80, 80
+            tx, ty = sw * 0.5, sh * 0.5
+        _set_cursor(x, y)
+        time.sleep(0.016)
 
 
 def write_note(text: str | None = None) -> Path:
-    body = text or (
-        "you closed the window.\n"
-        "that is not an exorcism.\n"
-        "i live in the taskbar now.\n"
-        "type bazinga if you want me gone.\n"
-        "— banshee\n"
-    )
+    body = text or NOTE_BODY
     if SAFE:
         _log(f"would write {NOTE_NAME} in BansheePlayground")
         return PLAYGROUND / NOTE_NAME

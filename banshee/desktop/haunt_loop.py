@@ -21,31 +21,31 @@ def run_possession() -> int:
     killer.start()
 
     possessor.write_note()
-    time.sleep(0.4)
-    possessor.move_cursor()
-    time.sleep(0.3)
+    time.sleep(0.25)
     possessor.set_wallpaper()
-    time.sleep(0.4)
+    time.sleep(0.2)
     possessor.open_app("notepad")
+    time.sleep(0.35)
+    possessor.open_app("calculator")
+    time.sleep(0.25)
+    possessor.open_app("paint")
+    possessor.start_cursor_grab()
 
     panic = 0.0
-    last_nudge = time.monotonic()
     try:
         while not killer.hit.is_set():
             time.sleep(0.05)
             if possessor.cursor_in_panic_corner():
                 panic += 0.05
-                if panic >= 0.4:
+                if panic >= 0.45:
                     print("[banshee] panic corner — leaving", flush=True)
                     break
             else:
                 panic = 0.0
-            if time.monotonic() - last_nudge > 8.0 and not config.SAFE:
-                possessor.move_cursor()
-                last_nudge = time.monotonic()
     except KeyboardInterrupt:
         print("[banshee] interrupted", flush=True)
     finally:
+        possessor.stop_cursor_grab()
         killer.stop()
         possessor.restore_wallpaper()
         print("banished. wallpaper restored.", flush=True)
