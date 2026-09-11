@@ -209,15 +209,25 @@ def restore_wallpaper() -> None:
         WALLPAPER_SAVE.unlink()
 
 
-def open_app(name: str = "notepad") -> None:
+def open_app(name: str = "notepad", note_index: int = 0) -> None:
     exe = ALLOWED_APPS.get(name.lower().strip(), ALLOWED_APPS["notepad"])
     if SAFE:
         _log(f"would open {exe}")
         return
-    note = PLAYGROUND / NOTE_NAME
     args = [exe]
-    if exe == "notepad.exe" and note.exists():
-        args.append(str(note))
+    if exe == "notepad.exe":
+        PLAYGROUND.mkdir(parents=True, exist_ok=True)
+        if note_index <= 0:
+            path = PLAYGROUND / NOTE_NAME
+            if not path.exists():
+                path.write_text(NOTE_BODY, encoding="utf-8")
+        else:
+            path = PLAYGROUND / f"STILL_HERE_{note_index}.txt"
+            path.write_text(
+                f"still here.\nthis is note {note_index}.\ntype bazinga.\n— banshee\n",
+                encoding="utf-8",
+            )
+        args.append(str(path))
     subprocess.Popen(args, close_fds=True)
     _log(f"opened {exe}")
 
@@ -230,13 +240,27 @@ def cursor_in_panic_corner() -> bool:
 
 
 class ActivityWatch:
-    """Counts real attempts to use the machine (move, click, type)."""
+    """Counts the human trying to use the machine. Ignores ghost-moved cursor."""
 
     def __init__(self) -> None:
         self.events = 0
+        self.ignore_motion = False
         self._origin: tuple[int, int] | None = None
+        self._last = 0.0
         self._mouse = None
         self._keys = None
+
+    def reset(self) -> None:
+        self.events = 0
+        self._origin = _cursor() if not SAFE else (0, 0)
+        self._last = time.monotonic()
+
+    def _bump(self) -> None:
+        now = time.monotonic()
+        if now - self._last < 0.7:
+            return
+        self._last = now
+        self.events += 1
 
     def start(self) -> None:
         try:
@@ -244,23 +268,25 @@ class ActivityWatch:
         except ImportError:
             _log("pynput missing — cannot watch input")
             return
-        self._origin = _cursor() if not SAFE else (0, 0)
+        self.reset()
 
         def on_move(x: float, y: float) -> None:
+            if self.ignore_motion:
+                return
             if self._origin is None:
                 self._origin = (int(x), int(y))
                 return
             ox, oy = self._origin
-            if abs(int(x) - ox) + abs(int(y) - oy) >= 14:
-                self.events += 1
+            if abs(int(x) - ox) + abs(int(y) - oy) >= 80:
                 self._origin = (int(x), int(y))
+                self._bump()
 
         def on_click(x: float, y: float, button: object, pressed: bool) -> None:
             if pressed:
-                self.events += 1
+                self._bump()
 
         def on_press(key: object) -> None:
-            self.events += 1
+            self._bump()
 
         self._mouse = mouse.Listener(on_move=on_move, on_click=on_click)
         self._keys = keyboard.Listener(on_press=on_press)
