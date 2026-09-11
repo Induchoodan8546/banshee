@@ -227,3 +227,55 @@ def cursor_in_panic_corner() -> bool:
         return False
     x, y = _cursor()
     return x <= 24 and y <= 24
+
+
+class ActivityWatch:
+    """Counts real attempts to use the machine (move, click, type)."""
+
+    def __init__(self) -> None:
+        self.events = 0
+        self._origin: tuple[int, int] | None = None
+        self._mouse = None
+        self._keys = None
+
+    def start(self) -> None:
+        try:
+            from pynput import keyboard, mouse
+        except ImportError:
+            _log("pynput missing — cannot watch input")
+            return
+        self._origin = _cursor() if not SAFE else (0, 0)
+
+        def on_move(x: float, y: float) -> None:
+            if self._origin is None:
+                self._origin = (int(x), int(y))
+                return
+            ox, oy = self._origin
+            if abs(int(x) - ox) + abs(int(y) - oy) >= 14:
+                self.events += 1
+                self._origin = (int(x), int(y))
+
+        def on_click(x: float, y: float, button: object, pressed: bool) -> None:
+            if pressed:
+                self.events += 1
+
+        def on_press(key: object) -> None:
+            self.events += 1
+
+        self._mouse = mouse.Listener(on_move=on_move, on_click=on_click)
+        self._keys = keyboard.Listener(on_press=on_press)
+        self._mouse.daemon = True
+        self._keys.daemon = True
+        self._mouse.start()
+        self._keys.start()
+
+    def stop(self) -> None:
+        for listener in (self._mouse, self._keys):
+            if listener is None:
+                continue
+            try:
+                listener.stop()
+            except Exception:
+                pass
+        self._mouse = None
+        self._keys = None

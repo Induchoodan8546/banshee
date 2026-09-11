@@ -41,6 +41,7 @@ HOUSE_ONLY = False
 PLAYGROUND = Path.home() / "BansheePlayground"
 NOTE_NAME = "DO_NOT_READ.txt"
 WALLPAPER_SAVE = DATA / "wallpaper.json"
+BANISHED_FLAG = DATA / "banished.flag"
 ALLOWED_APPS = {
     "notepad": "notepad.exe",
     "calculator": "calc.exe",
