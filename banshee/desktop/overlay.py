@@ -1,12 +1,12 @@
-"""Small bottom-right chat. Always above other apps. Bazinga lives here."""
+"""Small bottom-right chat + tk root. Same process as the mascot."""
 
 from __future__ import annotations
 
-import threading
 import tkinter as tk
 from tkinter import font as tkfont
 
 from banshee.config import KILL_SPELL
+from banshee.desktop.mascot import DesktopMascot
 from banshee.room.voice import Voice
 from banshee.system.banisher import Banisher
 
@@ -15,69 +15,125 @@ BOX_W, BOX_H = 280, 168
 
 class Overlay:
     def __init__(self) -> None:
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
         self._root: tk.Tk | None = None
         self._log: tk.Text | None = None
         self._entry: tk.Entry | None = None
         self.voice: Voice | None = None
         self.killer: Banisher | None = None
+        self.mascot: DesktopMascot | None = None
+        self._alive = True
 
     def attach(self, voice: Voice, killer: Banisher) -> None:
         self.voice = voice
         self.killer = killer
 
-    def start(self) -> None:
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def set_line(self, text: str) -> None:
-        self.add("banshee", text)
-
     def add(self, who: str, text: str) -> None:
         text = (text or "").replace("\n", " ").strip()
-        if not text:
+        if not text or self._log is None:
             return
         prefix = "you: " if who == "you" else "banshee: "
-
-        def _write() -> None:
-            if self._log is None:
-                return
+        try:
             self._log.configure(state="normal")
             self._log.insert("end", prefix + text + "\n")
             self._log.see("end")
             self._log.configure(state="disabled")
+        except tk.TclError:
+            pass
 
-        self._ui(_write)
+    def set_line(self, text: str) -> None:
+        self.add("banshee", text)
 
-    def stop(self) -> None:
-        self._stop.set()
-        root = self._root
-        if root is not None:
-            try:
-                root.after(0, root.destroy)
-            except Exception:
-                pass
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
+    def cursor_target(self) -> tuple[int, int] | None:
+        entry = self._entry
+        if entry is None:
+            return None
+        try:
+            entry.update_idletasks()
+            x = entry.winfo_rootx() + max(12, entry.winfo_width() // 2)
+            y = entry.winfo_rooty() + max(6, entry.winfo_height() // 2)
+            return (int(x), int(y))
+        except tk.TclError:
+            return None
 
-    def _ui(self, fn) -> None:
+    def _on_ui(self, fn) -> None:
         root = self._root
         if root is None:
             return
         try:
             root.after(0, fn)
-        except Exception:
+        except tk.TclError:
             pass
 
-    def _run(self) -> None:
-        try:
-            self._build()
-            assert self._root is not None
-            self._root.mainloop()
-        except Exception as exc:
-            print(f"[banshee] chat box failed: {exc}", flush=True)
+    def seize_input(self) -> None:
+        def _go() -> None:
+            self._pin()
+            root = self._root
+            if root is None:
+                return
+            try:
+                root.deiconify()
+                root.lift()
+                root.focus_force()
+                if self._entry is not None:
+                    self._entry.focus_force()
+                    self._entry.icursor("end")
+                pos = self.cursor_target()
+                if pos:
+                    from banshee.desktop import possessor
+
+                    if not possessor.SAFE:
+                        possessor._set_cursor(pos[0], pos[1])
+            except tk.TclError:
+                pass
+
+        self._on_ui(_go)
+
+    def release_input(self) -> None:
+        self._on_ui(self._pin)
+
+    def keep_front(self) -> None:
+        def _go() -> None:
+            self._pin()
+            if self.mascot is not None:
+                self.mascot.pin()
+
+        self._on_ui(_go)
+
+    def stop(self) -> None:
+        self._alive = False
+        root = self._root
+        if root is not None:
+            try:
+                root.quit()
+                root.destroy()
+            except Exception:
+                pass
+
+    def run(self) -> None:
+        """Main-thread tk loop: chat + mascot together so both stay on top."""
+        self._build()
+        assert self._root is not None
+        self.mascot = DesktopMascot(self._root)
+        self._root.after(30, self._tick)
+        self._root.mainloop()
+
+    def _tick(self) -> None:
+        root = self._root
+        if root is None or not self._alive:
+            return
+        if self.killer is not None and self.killer.hit.is_set():
+            self.stop()
+            return
+        if self.voice is not None:
+            line = self.voice.poll()
+            if line:
+                self.add("banshee", line)
+                if self.mascot is not None:
+                    self.mascot.talk()
+        if self.mascot is not None:
+            self.mascot.step()
+        self._pin()
+        root.after(33, self._tick)
 
     def _build(self) -> None:
         root = tk.Tk()
@@ -86,10 +142,6 @@ class Overlay:
         root.configure(bg="#1a1028")
         root.resizable(False, False)
         root.attributes("-topmost", True)
-        try:
-            root.attributes("-toolwindow", True)
-        except tk.TclError:
-            pass
         sw = root.winfo_screenwidth()
         sh = root.winfo_screenheight()
         x = max(8, sw - BOX_W - 16)
@@ -139,69 +191,17 @@ class Overlay:
             font=tiny,
         ).pack(side=tk.LEFT, padx=(6, 0))
         self._pin()
-        self._schedule_pin()
-
-    def seize_input(self) -> None:
-        """During cursor possession, typing goes to this box."""
-        def _go() -> None:
-            self._pin()
-            if self._entry is not None:
-                self._entry.focus_force()
-            if self._root is not None:
-                self._root.focus_force()
-                try:
-                    self._root.grab_set()
-                except tk.TclError:
-                    pass
-
-        self._ui(_go)
-
-    def release_input(self) -> None:
-        def _go() -> None:
-            if self._root is not None:
-                try:
-                    self._root.grab_release()
-                except tk.TclError:
-                    pass
-            self._pin()
-
-        self._ui(_go)
-
-    def keep_front(self) -> None:
-        self._ui(self._pin)
 
     def _pin(self) -> None:
         root = self._root
-        if root is None or self._stop.is_set():
+        if root is None or not self._alive:
             return
         try:
             root.deiconify()
-            root.attributes("-topmost", False)
             root.attributes("-topmost", True)
             root.lift()
-            import ctypes
-
-            wid = int(root.winfo_id())
-            parent = int(ctypes.windll.user32.GetParent(wid) or 0)
-            hwnd = parent or wid
-            ctypes.windll.user32.SetWindowPos(
-                hwnd,
-                -1,
-                0,
-                0,
-                0,
-                0,
-                0x0001 | 0x0002 | 0x0010 | 0x0040,
-            )
-        except Exception:
+        except tk.TclError:
             pass
-
-    def _schedule_pin(self) -> None:
-        root = self._root
-        if root is None or self._stop.is_set():
-            return
-        self._pin()
-        root.after(350, self._schedule_pin)
 
     def _send(self, event: object | None = None) -> None:
         if self._entry is None:
@@ -220,15 +220,14 @@ class Overlay:
             self.voice.ask(text, activity="player", kind="player")
 
     def _on_close(self) -> None:
-        root = self._root
-        if root is None or self._stop.is_set():
+        if not self._alive or self._root is None:
             return
         self.add("banshee", "closing the x is cute. i am not a window.")
-        root.withdraw()
-        root.after(1500, self._come_back)
+        self._root.withdraw()
+        self._root.after(1500, self._come_back)
 
     def _come_back(self) -> None:
-        if self._stop.is_set() or self._root is None:
+        if not self._alive or self._root is None:
             return
         try:
             self._root.deiconify()

@@ -76,6 +76,17 @@ def _screen() -> tuple[int, int]:
     return _user32().GetSystemMetrics(0), _user32().GetSystemMetrics(1)
 
 
+def virtual_screen() -> tuple[int, int, int, int]:
+    """x, y, w, h of the whole desktop (all monitors)."""
+    u = _user32()
+    return (
+        int(u.GetSystemMetrics(76)),
+        int(u.GetSystemMetrics(77)),
+        int(u.GetSystemMetrics(78) or _screen()[0]),
+        int(u.GetSystemMetrics(79) or _screen()[1]),
+    )
+
+
 def move_cursor(dx: int | None = None, dy: int | None = None) -> None:
     dx = dx if dx is not None else random.randint(120, 280) * random.choice((-1, 1))
     dy = dy if dy is not None else random.randint(60, 160) * random.choice((-1, 1))
@@ -109,21 +120,29 @@ def nudge_brief() -> None:
     move_cursor()
 
 
-def possess_cursor_burst(seconds: float = 2.4, on_end=None) -> None:
-    """Steal the pointer briefly, then give it back."""
-    start_cursor_grab()
-    token = _grab
+def possess_cursor_burst(seconds: float = 2.4, on_end=None, overlay=None) -> None:
+    """Yank once, then park the cursor on the chat box so they can type."""
+    stop_cursor_grab()
+    if not SAFE:
+        move_cursor()
+    if overlay is not None:
+        overlay.seize_input()
+        pos = overlay.cursor_target()
+        if pos and not SAFE:
+            _set_cursor(int(pos[0]), int(pos[1]))
+        _log("cursor handed to chat box")
+    else:
+        start_cursor_grab()
 
     def _release() -> None:
-        if _grab is token:
-            stop_cursor_grab()
+        stop_cursor_grab()
         if on_end is not None:
             try:
                 on_end()
             except Exception:
                 pass
 
-    threading.Timer(max(1.2, seconds), _release).start()
+    threading.Timer(max(1.5, seconds), _release).start()
 
 
 def start_cursor_grab() -> None:

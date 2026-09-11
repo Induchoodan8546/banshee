@@ -16,13 +16,14 @@ from banshee.room.voice import Voice
 from banshee.system.banisher import Banisher
 
 KEY_MAGENTA = (255, 0, 255)
-WIN_W, WIN_H = 360, 300
-PAD_X, PAD_Y = 90, 90
+WIN_W, WIN_H = 280, 240
+PAD_X, PAD_Y = 70, 70
 
 GWL_EXSTYLE = -20
 WS_EX_LAYERED = 0x00080000
 WS_EX_TRANSPARENT = 0x00000020
 WS_EX_TOPMOST = 0x00000008
+WS_EX_NOACTIVATE = 0x08000000
 LWA_COLORKEY = 0x00000001
 HWND_TOPMOST = -1
 SWP_SHOWWINDOW = 0x0040
@@ -39,7 +40,11 @@ def _hwnd_tools():
 def _style_window(hwnd: int) -> None:
     user32, get_long, set_long = _hwnd_tools()
     style = get_long(hwnd, GWL_EXSTYLE)
-    set_long(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST)
+    set_long(
+        hwnd,
+        GWL_EXSTYLE,
+        style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+    )
     user32.SetLayeredWindowAttributes(hwnd, 0x00FF00FF, 255, LWA_COLORKEY)
 
 
@@ -65,18 +70,21 @@ class Wanderer:
         pygame.init()
         pygame.font.init()
         pygame.display.set_caption("BANSHEE")
-        sw, sh = possessor._screen()
+        vx, vy, sw, sh = possessor.virtual_screen()
+        if sw <= 0 or sh <= 0:
+            sw, sh = possessor._screen()
+            vx, vy = 0, 0
         screen = pygame.display.set_mode((WIN_W, WIN_H), pygame.NOFRAME)
         hwnd = pygame.display.get_wm_info().get("window")
         hwnd = int(hwnd) if hwnd else 0
         if hwnd:
             _style_window(hwnd)
 
-        ghost = Ghost((sw // 2, sh // 3), scale=1.7)
-        ghost.set_world(max(240, sw - 40), sh, sh - 48)
+        ghost = Ghost((vx + sw // 2, vy + sh // 3), scale=1.7)
+        ghost.set_world(sw, sh, vy + sh - 48, origin_x=vx, origin_y=vy)
         start = (
-            random.randint(60, max(80, sw - WIN_W - 40)),
-            random.randint(60, max(80, sh - WIN_H - 80)),
+            vx + random.randint(40, max(80, sw - WIN_W - 40)),
+            vy + random.randint(40, max(80, sh - WIN_H - 80)),
         )
         ghost.manifest(start)
         bubble = Bubble()
@@ -115,20 +123,20 @@ class Wanderer:
             bubble.tick(dt)
 
             if ghost.state is GhostState.ABSENT:
-                ghost.manifest(self._perch(sw, sh))
+                ghost.manifest(self._perch(vx, vy, sw, sh))
 
             if (not ghost.busy()) and now >= next_drift:
-                follow = random.random() < 0.28
+                follow = random.random() < 0.22
                 if follow:
                     mx, my = possessor._cursor()
                     target = (
-                        max(24, min(sw - WIN_W - 16, mx - 40)),
-                        max(24, min(sh - WIN_H - 80, my - 40)),
+                        max(vx + 16, min(vx + sw - WIN_W - 16, mx - 40)),
+                        max(vy + 16, min(vy + sh - WIN_H - 80, my - 40)),
                     )
                 else:
-                    target = self._perch(sw, sh)
-                ghost.drift_to(target, random.uniform(1.2, 2.4))
-                next_drift = now + random.uniform(1.4, 2.4)
+                    target = self._perch(vx, vy, sw, sh)
+                ghost.drift_to(target, random.uniform(1.4, 2.8))
+                next_drift = now + random.uniform(0.9, 1.8)
             if (not ghost.busy()) and now >= next_scare:
                 ghost.scare()
                 next_scare = now + random.uniform(7.0, 12.0)
@@ -146,13 +154,14 @@ class Wanderer:
 
             wx = int(ghost.x - PAD_X)
             wy = int(ghost.y - PAD_Y)
-            wx = max(0, min(sw - WIN_W, wx))
-            wy = max(0, min(sh - WIN_H, wy))
+            wx = max(vx, min(vx + sw - WIN_W, wx))
+            wy = max(vy, min(vy + sh - WIN_H, wy))
             if hwnd:
+                _style_window(hwnd)
                 _move_window(hwnd, wx, wy)
             if now >= next_pin:
                 self.overlay.keep_front()
-                next_pin = now + 0.35
+                next_pin = now + 0.2
 
             screen.fill(KEY_MAGENTA)
             sx, sy = ghost.x, ghost.y
@@ -168,11 +177,12 @@ class Wanderer:
 
         pygame.quit()
 
-    def _perch(self, sw: int, sh: int) -> tuple[float, float]:
-        # keep off the chat box (bottom-right)
-        for _ in range(8):
-            x = random.uniform(24, max(48, sw - WIN_W - 16))
-            y = random.uniform(24, max(48, sh - WIN_H - 72))
-            if x < sw - 320 or y < sh - 240:
+    def _perch(self, vx: int, vy: int, sw: int, sh: int) -> tuple[float, float]:
+        chat_x = vx + sw - 300
+        chat_y = vy + sh - 220
+        for _ in range(12):
+            x = random.uniform(vx + 8, vx + max(80, sw - WIN_W - 8))
+            y = random.uniform(vy + 8, vy + max(80, sh - WIN_H - 48))
+            if x + WIN_W < chat_x or y + WIN_H < chat_y:
                 return (x, y)
-        return (80.0, 80.0)
+        return (float(vx + 40), float(vy + 40))

@@ -61,11 +61,15 @@ class Ghost:
         self.world_w = ROOM_W
         self.world_h = ROOM_H
         self.floor_y = FLOOR_Y
+        self.origin_x = 0
+        self.origin_y = 0
 
-    def set_world(self, width: int, height: int, floor_y: int) -> None:
+    def set_world(self, width: int, height: int, floor_y: int, origin_x: int = 0, origin_y: int = 0) -> None:
         self.world_w = width
         self.world_h = height
         self.floor_y = floor_y
+        self.origin_x = origin_x
+        self.origin_y = origin_y
 
     @property
     def w(self) -> int:
@@ -99,8 +103,8 @@ class Ghost:
         return 0.0
 
     def clamp_pos(self) -> None:
-        self.x = motion.clamp(self.x, 6, self.world_w - self.w - 6)
-        self.y = motion.clamp(self.y, 24, self.floor_y - self.h + 12)
+        self.x = motion.clamp(self.x, self.origin_x + 6, self.origin_x + self.world_w - self.w - 6)
+        self.y = motion.clamp(self.y, self.origin_y + 24, self.floor_y - self.h + 12)
 
     def manifest(self, xy: tuple[float, float] | None = None) -> None:
         if xy:

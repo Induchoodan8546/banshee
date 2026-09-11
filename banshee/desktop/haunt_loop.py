@@ -1,4 +1,4 @@
-"""Possess: notepad first, then blob + chat, then bursts of cursor and apps."""
+"""Possess: notepad, wallpaper, then tk mascot + chat (always on top)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import time
 from banshee import config
 from banshee.desktop import possessor
 from banshee.desktop.overlay import Overlay
-from banshee.desktop.wander import Wanderer
 from banshee.room.voice import Voice
 from banshee.system.banisher import Banisher
 
@@ -19,9 +18,9 @@ def _mischief(stop: threading.Event, overlay: Overlay) -> None:
     while not stop.is_set():
         roll = random.random()
         if roll < 0.42:
-            overlay.seize_input()
             possessor.possess_cursor_burst(
                 random.uniform(2.0, 2.8),
+                overlay=overlay,
                 on_end=overlay.release_input,
             )
         elif roll < 0.78:
@@ -32,7 +31,7 @@ def _mischief(stop: threading.Event, overlay: Overlay) -> None:
             possessor.open_search()
             overlay.keep_front()
         waited = 0.0
-        gap = random.uniform(2.3, 3.2)
+        gap = random.uniform(5.0, 6.5)
         while waited < gap and not stop.is_set():
             time.sleep(0.1)
             waited += 0.1
@@ -49,23 +48,26 @@ def run_possession() -> int:
     voice = Voice()
     overlay = Overlay()
     overlay.attach(voice, killer)
-    overlay.start()
-    time.sleep(0.3)
 
     possessor.write_note()
     possessor.open_app("notepad", note_index=0)
-    time.sleep(0.8)
+    time.sleep(0.6)
     possessor.set_wallpaper()
-    overlay.add("banshee", "now your system is mine.")
 
     mischief = threading.Thread(target=_mischief, args=(killer.hit, overlay), daemon=True)
     mischief.start()
 
-    wander = Wanderer(voice, overlay, killer)
+    voice.ask(
+        "you just took the desktop. say now your system is mine. one more short line.",
+        activity="desktop",
+        kind="ambient",
+    )
+
     try:
-        wander.run()
+        overlay.run()
     except KeyboardInterrupt:
         print("[banshee] interrupted", flush=True)
+        killer.hit.set()
     finally:
         possessor.stop_cursor_grab()
         overlay.stop()
