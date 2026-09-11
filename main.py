@@ -1,4 +1,4 @@
-"""Boot. Phase 0 is a terminal chat. The pygame room starts in a later phase."""
+"""Boot. --chat talks. --house-only opens the pixel bedroom."""
 
 from __future__ import annotations
 
@@ -48,8 +48,12 @@ def main() -> int:
     config.HOUSE_ONLY = bool(args.house_only)
     if args.chat:
         return run_chat()
-    print("Phase 0: python main.py --chat")
-    print("The room is not built yet. Do not start pygame until the ghost talks.")
+    if args.house_only:
+        from banshee.room.scene import run_house
+
+        return run_house()
+    print("python main.py --chat        talk to the ghost")
+    print("python main.py --house-only  enter the bedroom")
     return 0
 
 
