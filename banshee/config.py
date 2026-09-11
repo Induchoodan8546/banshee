@@ -14,12 +14,15 @@ ASSETS_SHADOWS = ASSETS / "shadows"
 ASSETS_UI = ASSETS / "ui"
 
 # Cropped bedroom only — no TV / controller bezel.
-WINDOW_W = 1072
-WINDOW_H = 596
+ROOM_W = 1072
+ROOM_H = 596
+CHAT_DOCK_H = 168
+WINDOW_W = ROOM_W
+WINDOW_H = ROOM_H + CHAT_DOCK_H
 FPS = 60
-INNER = (0, 0, WINDOW_W, WINDOW_H)
+INNER = (0, 0, ROOM_W, ROOM_H)
 FLOOR_Y = 510
-CAPTION_Y = WINDOW_H - 34
+CAPTION_Y = ROOM_H - 34
 
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
 MODEL = os.environ.get("BANSHEE_MODEL", "llama3.2:3b")

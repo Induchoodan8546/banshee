@@ -8,7 +8,7 @@ from enum import Enum
 import pygame
 
 from banshee.actors import motion
-from banshee.config import ASSETS_GHOST, FLOOR_Y, WINDOW_W
+from banshee.config import ASSETS_GHOST, FLOOR_Y, ROOM_W
 
 
 class GhostState(str, Enum):
@@ -81,12 +81,16 @@ class Ghost:
             GhostState.HIDE,
             GhostState.PEEK,
             GhostState.SCARE,
-            GhostState.TALK,
             GhostState.VANISH,
         )
 
+    def idle_for(self) -> float:
+        if self.state is GhostState.IDLE:
+            return self._state_t
+        return 0.0
+
     def clamp_pos(self) -> None:
-        self.x = motion.clamp(self.x, 6, WINDOW_W - self.w - 6)
+        self.x = motion.clamp(self.x, 6, ROOM_W - self.w - 6)
         self.y = motion.clamp(self.y, 24, FLOOR_Y - self.h + 12)
 
     def manifest(self, xy: tuple[float, float] | None = None) -> None:
@@ -171,7 +175,7 @@ class Ghost:
             self._tick_scare()
         elif self.state is GhostState.TALK:
             self.alpha = 255
-            if self._state_t > 2.4:
+            if self._state_t > 1.3:
                 self.state = GhostState.IDLE
                 self._state_t = 0.0
         elif self.state is GhostState.VANISH:

@@ -1,4 +1,4 @@
-"""Horror pacing: unease → shadows → she appears → she acts alone."""
+"""Horror pacing plus a will of her own. She does not wait to be told."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from enum import Enum
 from banshee.actors.ghost import Ghost, GhostState
 from banshee.actors.shade import Shade, ShadeKind
 from banshee.room.props import Props
+from banshee.room.voice import Voice
 from banshee.room.whispers import Whispers
 
 
@@ -19,11 +20,19 @@ class Act(str, Enum):
 
 
 class Director:
-    def __init__(self, props: Props, ghost: Ghost, shade: Shade, whispers: Whispers) -> None:
+    def __init__(
+        self,
+        props: Props,
+        ghost: Ghost,
+        shade: Shade,
+        whispers: Whispers,
+        voice: Voice,
+    ) -> None:
         self.props = props
         self.ghost = ghost
         self.shade = shade
         self.whispers = whispers
+        self.voice = voice
         self.act = Act.UNEASE
         self.t = 0.0
         self.act_t = 0.0
@@ -31,15 +40,25 @@ class Director:
         self.opened_wardrobe = False
         self._fired: set[str] = set()
         self._shadow_step = 0
-        self._next_haunt = 2.8
-        self._haunt_cd = 0.0
+        self._haunt_cd = 0.4
+        self._mutter_cd = 5.0
 
-    def note_interact(self, kind: str) -> None:
+    def here(self) -> bool:
+        return self.act in (Act.APPEAR, Act.HAUNT) and self.ghost.state is not GhostState.ABSENT
+
+    def note_interact(self, kind: str, detail: str = "") -> None:
         self.interacts += 1
         if kind == "open":
             self.opened_wardrobe = True
         if self.act is Act.UNEASE and self.interacts >= 1:
             self._to(Act.SHADOWS)
+        if self.here() and kind in ("open", "close", "poke", "drag", "lamp"):
+            snap = detail or kind
+            self.voice.ask(
+                f"the human just did this in your bedroom: {snap}. "
+                "one short comment. do not be helpful.",
+                activity=snap,
+            )
 
     def _fire(self, name: str) -> bool:
         if name in self._fired:
@@ -100,13 +119,17 @@ class Director:
 
     def _appear(self) -> None:
         if self._fire("manifest"):
-            spot = self._random_spawn()
-            self.ghost.manifest(spot)
-            self.whispers.set("you looked too long")
+            self.ghost.manifest(self._random_spawn())
+            self.whispers.set("")
+            self.voice.ask(
+                "the human looked too long. you just manifested in the bedroom. "
+                "first words. 1 or 2 short sentences. you are pleased they noticed.",
+                activity="ghost just appeared",
+            )
         if self.ghost.state is GhostState.IDLE and self.act_t > 1.4:
-            self.ghost.talk_now()
             self.props.unease_rock = False
             self._to(Act.HAUNT)
+            self._haunt_cd = 0.3
 
     def _random_spawn(self) -> tuple[float, float]:
         wr = self.props.items["wardrobe"]
@@ -118,43 +141,62 @@ class Director:
         ]
         if wr.opened:
             choices.append((wr.x + 40, wr.y + 40))
-        x, y = random.choice(choices)
-        return (x, y)
+        return random.choice(choices)
+
+    def _random_perch(self) -> tuple[float, float]:
+        px, py = random.choice(list(self.props.perches.values()))
+        return (px, py)
 
     def _haunt(self, dt: float) -> None:
         self._haunt_cd -= dt
-        if self.ghost.busy() or self._haunt_cd > 0:
+        self._mutter_cd -= dt
+        if (
+            self._mutter_cd <= 0
+            and not self.voice.busy
+            and self.ghost.state is not GhostState.ABSENT
+        ):
+            self._mutter_cd = random.uniform(7.0, 12.0)
+            self.voice.ask(
+                "you are haunting on your own. mutter one short line about this room "
+                "or the human. do not greet. do not ask a question.",
+                activity="idle haunt",
+            )
+        if self.ghost.busy():
             return
-        action = random.choice(
-            ("drift", "drift", "hide", "scare", "knock", "flicker", "nudge", "vanish")
-        )
-        self._haunt_cd = random.uniform(2.6, 4.8)
+        if self.ghost.idle_for() > 1.15:
+            self._do("drift")
+            return
+        if self._haunt_cd > 0:
+            return
+        self._haunt_cd = random.uniform(1.1, 2.0)
+        action = random.choices(
+            ("drift", "hide", "vanish", "scare", "knock", "flicker", "nudge", "open"),
+            weights=(36, 14, 14, 10, 8, 8, 6, 4),
+            k=1,
+        )[0]
+        self._do(action)
+
+    def _do(self, action: str) -> None:
         if action == "drift":
-            name = random.choice(list(self.props.perches))
-            px, py = self.props.perches[name]
-            self.ghost.drift_to((px, py), random.uniform(0.8, 1.2))
+            self.ghost.drift_to(self._random_perch(), random.uniform(0.55, 1.05))
         elif action == "hide":
             wr = self.props.items["wardrobe"]
-            if wr.opened:
-                self.ghost.hide_behind(
-                    "wardrobe",
-                    self.props.hide_slot("wardrobe"),
-                    self.props.peek_slot("wardrobe"),
-                )
-            else:
-                self.ghost.hide_behind(
-                    "chest",
-                    self.props.hide_slot("chest"),
-                    self.props.peek_slot("chest"),
-                )
+            pid = "wardrobe" if wr.opened else "chest"
+            self.ghost.hide_behind(pid, self.props.hide_slot(pid), self.props.peek_slot(pid))
+        elif action == "vanish":
+            self.ghost.vanish_to(self._random_perch())
         elif action == "scare":
             self.ghost.scare()
         elif action == "knock":
             self.props.tap_chest()
+            self._haunt_cd = 0.6
         elif action == "flicker":
-            self.props.flicker_lamp(0.9)
+            self.props.flicker_lamp(0.8)
+            self._haunt_cd = 0.5
         elif action == "nudge":
-            self.props.nudge("chair", random.choice((-8, 8)))
-        elif action == "vanish":
-            name = random.choice(list(self.props.perches))
-            self.ghost.vanish_to(self.props.perches[name])
+            self.props.nudge("chair", random.choice((-10, 10)))
+            self._haunt_cd = 0.5
+        elif action == "open":
+            wr = self.props.items["wardrobe"]
+            wr.opened = not wr.opened
+            self._haunt_cd = 0.7

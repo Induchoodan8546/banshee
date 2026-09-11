@@ -7,7 +7,7 @@ import math
 
 import pygame
 
-from banshee.config import ASSETS_ROOM, FLOOR_Y, WINDOW_W
+from banshee.config import ASSETS_ROOM, FLOOR_Y, ROOM_W
 
 
 class Prop:
@@ -119,7 +119,7 @@ class Props:
         prop = self.items[self.dragging]
         prop.x = int(pos[0] - self._grab[0])
         prop.y = int(pos[1] - self._grab[1])
-        prop.x = max(8, min(WINDOW_W - prop.rect.w - 8, prop.x))
+        prop.x = max(8, min(ROOM_W - prop.rect.w - 8, prop.x))
         prop.y = max(int(FLOOR_Y - prop.h - 40), min(int(FLOOR_Y - prop.h + 8), prop.y))
 
     def end_drag(self) -> None:
@@ -149,7 +149,7 @@ class Props:
 
     def nudge(self, pid: str, dx: int) -> None:
         prop = self.items[pid]
-        prop.x = max(8, min(WINDOW_W - prop.rect.w - 8, prop.x + dx))
+        prop.x = max(8, min(ROOM_W - prop.rect.w - 8, prop.x + dx))
 
     def update(self, dt: float, now: float) -> None:
         chair = self.items["chair"]
