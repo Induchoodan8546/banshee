@@ -37,3 +37,12 @@ WALL_IS_BUFFERING = "the wall is buffering"
 
 SAFE = False
 HOUSE_ONLY = False
+
+PLAYGROUND = Path.home() / "BansheePlayground"
+NOTE_NAME = "DO_NOT_READ.txt"
+WALLPAPER_SAVE = DATA / "wallpaper.json"
+ALLOWED_APPS = {
+    "notepad": "notepad.exe",
+    "calculator": "calc.exe",
+    "paint": "mspaint.exe",
+}

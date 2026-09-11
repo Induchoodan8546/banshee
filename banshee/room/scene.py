@@ -19,7 +19,7 @@ from banshee.room.voice import Voice
 from banshee.room.whispers import Whispers
 
 
-def run_house() -> int:
+def run_house(*, possess_on_close: bool = False) -> str:
     pygame.init()
     pygame.display.set_caption("BANSHEE")
     screen = pygame.display.set_mode((WINDOW_W, WINDOW_H))
@@ -38,8 +38,15 @@ def run_house() -> int:
     director = Director(props, ghost, shade, whispers, voice, bubble)
 
     running = True
+    outcome = "quit"
     now = 0.0
     pygame.key.stop_text_input()
+
+    def request_close() -> None:
+        nonlocal running, outcome
+        running = False
+        if possess_on_close:
+            outcome = "possess"
 
     def in_room(pos: tuple[int, int]) -> bool:
         return pos[1] < ROOM_H
@@ -50,7 +57,7 @@ def run_house() -> int:
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                request_close()
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if chat.contains(event.pos):
                     chat.focus = True
@@ -103,10 +110,10 @@ def run_house() -> int:
                     elif sent == "":
                         pass
                     elif event.key == pygame.K_ESCAPE and not chat.draft:
-                        running = False
+                        request_close()
                     continue
                 if event.key == pygame.K_ESCAPE:
-                    running = False
+                    request_close()
                 elif event.key == pygame.K_RETURN and director.here():
                     chat.focus = True
                     pygame.key.start_text_input()
@@ -139,8 +146,8 @@ def run_house() -> int:
         pygame.display.flip()
 
     pygame.quit()
-    return 0
+    return outcome
 
 
 if __name__ == "__main__":
-    sys.exit(run_house())
+    sys.exit(0 if run_house() == "quit" else 0)
