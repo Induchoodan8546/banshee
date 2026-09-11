@@ -57,6 +57,7 @@ class Ghost:
         self._pending_hide = False
         self._peek_pos = self.home
         self._vanish_to = self.home
+        self._talking_left = 0.0
         self.world_w = ROOM_W
         self.world_h = ROOM_H
         self.floor_y = FLOOR_Y
@@ -116,9 +117,11 @@ class Ghost:
     def talk_now(self) -> None:
         if self.state is GhostState.ABSENT:
             return
-        self.state = GhostState.TALK
-        self._state_t = 0.0
+        self._talking_left = 3.2
         self.alpha = 255
+        if self.state in (GhostState.IDLE, GhostState.TALK):
+            self.state = GhostState.TALK
+            self._state_t = 0.0
 
     def drift_to(self, xy: tuple[float, float], duration: float = 0.9) -> None:
         if self.state is GhostState.ABSENT:
@@ -166,6 +169,8 @@ class Ghost:
             self._blink_in = random.uniform(2.0, 4.0)
         if self._blink_left > 0:
             self._blink_left -= dt
+        if self._talking_left > 0:
+            self._talking_left -= dt
         self.hover, self.squash = motion.breathe_px(now)
 
         if self.state is not GhostState.ABSENT:
@@ -261,6 +266,8 @@ class Ghost:
     def current_body(self) -> pygame.Surface:
         if self.state is GhostState.PEEK:
             return self.peek_img
+        if self._talking_left > 0 and self._blink_left <= 0:
+            return self.talk
         if self.state is GhostState.TALK and self._blink_left <= 0:
             return self.talk
         if self._blink_left > 0:

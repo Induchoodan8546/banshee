@@ -1,4 +1,4 @@
-"""Small bottom-right chat. Stays on top of every window. Bazinga lives here."""
+"""Small bottom-right chat. Always above other apps. Bazinga lives here."""
 
 from __future__ import annotations
 
@@ -138,6 +138,70 @@ class Overlay:
             relief="flat",
             font=tiny,
         ).pack(side=tk.LEFT, padx=(6, 0))
+        self._pin()
+        self._schedule_pin()
+
+    def seize_input(self) -> None:
+        """During cursor possession, typing goes to this box."""
+        def _go() -> None:
+            self._pin()
+            if self._entry is not None:
+                self._entry.focus_force()
+            if self._root is not None:
+                self._root.focus_force()
+                try:
+                    self._root.grab_set()
+                except tk.TclError:
+                    pass
+
+        self._ui(_go)
+
+    def release_input(self) -> None:
+        def _go() -> None:
+            if self._root is not None:
+                try:
+                    self._root.grab_release()
+                except tk.TclError:
+                    pass
+            self._pin()
+
+        self._ui(_go)
+
+    def keep_front(self) -> None:
+        self._ui(self._pin)
+
+    def _pin(self) -> None:
+        root = self._root
+        if root is None or self._stop.is_set():
+            return
+        try:
+            root.deiconify()
+            root.attributes("-topmost", False)
+            root.attributes("-topmost", True)
+            root.lift()
+            import ctypes
+
+            wid = int(root.winfo_id())
+            parent = int(ctypes.windll.user32.GetParent(wid) or 0)
+            hwnd = parent or wid
+            ctypes.windll.user32.SetWindowPos(
+                hwnd,
+                -1,
+                0,
+                0,
+                0,
+                0,
+                0x0001 | 0x0002 | 0x0010 | 0x0040,
+            )
+        except Exception:
+            pass
+
+    def _schedule_pin(self) -> None:
+        root = self._root
+        if root is None or self._stop.is_set():
+            return
+        self._pin()
+        root.after(350, self._schedule_pin)
 
     def _send(self, event: object | None = None) -> None:
         if self._entry is None:

@@ -26,6 +26,7 @@ WS_EX_TOPMOST = 0x00000008
 LWA_COLORKEY = 0x00000001
 HWND_TOPMOST = -1
 SWP_SHOWWINDOW = 0x0040
+SWP_NOACTIVATE = 0x0010
 
 
 def _hwnd_tools():
@@ -44,7 +45,13 @@ def _style_window(hwnd: int) -> None:
 
 def _move_window(hwnd: int, x: int, y: int) -> None:
     ctypes.windll.user32.SetWindowPos(
-        hwnd, HWND_TOPMOST, int(x), int(y), WIN_W, WIN_H, SWP_SHOWWINDOW
+        hwnd,
+        HWND_TOPMOST,
+        int(x),
+        int(y),
+        WIN_W,
+        WIN_H,
+        SWP_SHOWWINDOW | SWP_NOACTIVATE,
     )
 
 
@@ -81,9 +88,11 @@ class Wanderer:
 
         clock = pygame.time.Clock()
         t = 0.0
-        next_drift = time.monotonic() + 0.6
-        next_scare = time.monotonic() + 4.0
+        next_drift = time.monotonic() + 0.5
+        next_scare = time.monotonic() + 6.0
         next_talk = time.monotonic() + 5.0
+        next_pin = 0.0
+        follow = False
 
         while not self.killer.hit.is_set():
             dt = clock.tick(60) / 1000.0
@@ -109,11 +118,20 @@ class Wanderer:
                 ghost.manifest(self._perch(sw, sh))
 
             if (not ghost.busy()) and now >= next_drift:
-                ghost.drift_to(self._perch(sw, sh), random.uniform(0.85, 1.6))
-                next_drift = now + random.uniform(1.1, 2.0)
+                follow = random.random() < 0.28
+                if follow:
+                    mx, my = possessor._cursor()
+                    target = (
+                        max(24, min(sw - WIN_W - 16, mx - 40)),
+                        max(24, min(sh - WIN_H - 80, my - 40)),
+                    )
+                else:
+                    target = self._perch(sw, sh)
+                ghost.drift_to(target, random.uniform(1.2, 2.4))
+                next_drift = now + random.uniform(1.4, 2.4)
             if (not ghost.busy()) and now >= next_scare:
                 ghost.scare()
-                next_scare = now + random.uniform(5.0, 9.0)
+                next_scare = now + random.uniform(7.0, 12.0)
             if now >= next_talk and not self.voice.talking_to_player() and not self.voice.pending_work():
                 title = monitor.foreground_title() or "the desktop"
                 self.voice.ask(
@@ -132,6 +150,9 @@ class Wanderer:
             wy = max(0, min(sh - WIN_H, wy))
             if hwnd:
                 _move_window(hwnd, wx, wy)
+            if now >= next_pin:
+                self.overlay.keep_front()
+                next_pin = now + 0.35
 
             screen.fill(KEY_MAGENTA)
             sx, sy = ghost.x, ghost.y
@@ -148,7 +169,10 @@ class Wanderer:
         pygame.quit()
 
     def _perch(self, sw: int, sh: int) -> tuple[float, float]:
-        return (
-            random.uniform(24, max(48, sw - WIN_W - 16)),
-            random.uniform(24, max(48, sh - WIN_H - 72)),
-        )
+        # keep off the chat box (bottom-right)
+        for _ in range(8):
+            x = random.uniform(24, max(48, sw - WIN_W - 16))
+            y = random.uniform(24, max(48, sh - WIN_H - 72))
+            if x < sw - 320 or y < sh - 240:
+                return (x, y)
+        return (80.0, 80.0)

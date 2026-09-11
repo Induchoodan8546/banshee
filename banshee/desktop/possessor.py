@@ -109,7 +109,7 @@ def nudge_brief() -> None:
     move_cursor()
 
 
-def possess_cursor_burst(seconds: float = 2.4) -> None:
+def possess_cursor_burst(seconds: float = 2.4, on_end=None) -> None:
     """Steal the pointer briefly, then give it back."""
     start_cursor_grab()
     token = _grab
@@ -117,6 +117,11 @@ def possess_cursor_burst(seconds: float = 2.4) -> None:
     def _release() -> None:
         if _grab is token:
             stop_cursor_grab()
+        if on_end is not None:
+            try:
+                on_end()
+            except Exception:
+                pass
 
     threading.Timer(max(1.2, seconds), _release).start()
 

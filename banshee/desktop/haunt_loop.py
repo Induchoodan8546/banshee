@@ -14,20 +14,25 @@ from banshee.room.voice import Voice
 from banshee.system.banisher import Banisher
 
 
-def _mischief(stop: threading.Event) -> None:
-    time.sleep(2.4)
+def _mischief(stop: threading.Event, overlay: Overlay) -> None:
+    time.sleep(2.2)
     while not stop.is_set():
         roll = random.random()
-        if roll < 0.40:
-            possessor.possess_cursor_burst(random.uniform(2.0, 3.0))
-        elif roll < 0.75:
+        if roll < 0.42:
+            overlay.seize_input()
+            possessor.possess_cursor_burst(
+                random.uniform(2.0, 2.8),
+                on_end=overlay.release_input,
+            )
+        elif roll < 0.78:
             name = random.choice(["notepad", "calculator", "paint"])
             possessor.open_app(name, note_index=random.randint(0, 4))
+            overlay.keep_front()
         else:
             possessor.open_search()
-        # let the human breathe, then hit again
+            overlay.keep_front()
         waited = 0.0
-        gap = random.uniform(2.4, 3.4)
+        gap = random.uniform(2.3, 3.2)
         while waited < gap and not stop.is_set():
             time.sleep(0.1)
             waited += 0.1
@@ -53,7 +58,7 @@ def run_possession() -> int:
     possessor.set_wallpaper()
     overlay.add("banshee", "now your system is mine.")
 
-    mischief = threading.Thread(target=_mischief, args=(killer.hit,), daemon=True)
+    mischief = threading.Thread(target=_mischief, args=(killer.hit, overlay), daemon=True)
     mischief.start()
 
     wander = Wanderer(voice, overlay, killer)
