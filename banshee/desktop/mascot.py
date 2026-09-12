@@ -87,7 +87,7 @@ class DesktopMascot:
         self.x = float(vx + sw * 0.4)
         self.y = float(vy + sh * 0.3)
         self.tx, self.ty = self.x, self.y
-        self._speed = 1.15
+        self._speed = 1.45
         self._t = 0.0
         self._talk = 0.0
         self._blink = 0.0
@@ -179,10 +179,10 @@ class DesktopMascot:
 
         if self._hold <= 0.6 and now >= self._next_drift:
             self._pick_target()
-            self._next_drift = now + random.uniform(2.0, 3.4)
+            self._next_drift = now + random.uniform(1.5, 2.6)
 
         # crawl while the bubble is up so the user can read it
-        rate = 0.35 if self._hold > 0.5 else self._speed
+        rate = 0.45 if self._hold > 0.5 else self._speed
         k = min(1.0, dt * rate)
         self.x += (self.tx - self.x) * k
         self.y += (self.ty - self.y) * k
@@ -265,10 +265,10 @@ class DesktopMascot:
                 mx, my = possessor._cursor()
                 self.tx = mx - WIN_W / 2
                 self.ty = my - WIN_H / 2
-                self._speed = random.uniform(1.0, 1.6)
+                self._speed = random.uniform(1.2, 1.9)
                 return
             except Exception:
                 pass
         self.tx = random.uniform(self.vx + 8, self.vx + max(40, self.sw - WIN_W - 8))
         self.ty = random.uniform(self.vy + 8, self.vy + max(40, self.sh - WIN_H - 70))
-        self._speed = random.uniform(0.85, 1.55)
+        self._speed = random.uniform(1.15, 1.85)

@@ -15,27 +15,26 @@ from banshee.system.banisher import Banisher
 def _mischief(stop: threading.Event, overlay: Overlay) -> None:
     started = time.monotonic()
     i = 0
-    time.sleep(2.5)
+    time.sleep(1.4)
     while not stop.is_set():
         if overlay.chatting():
             time.sleep(0.4)
             continue
         elapsed = time.monotonic() - started
         heat = min(1.0, elapsed / 90.0)
-        # later: more paint, search, cursor
-        if heat < 0.25:
-            bag = ("paint", "cursor", "notepad", "search", "calc")
-        elif heat < 0.6:
-            bag = ("paint", "search", "cursor", "search", "paint", "calc", "notepad")
+        if heat < 0.22:
+            bag = ("search", "cursor", "paint", "notepad", "calc")
+        elif heat < 0.55:
+            bag = ("paint", "search", "cursor", "search", "paint", "cursor", "calc")
         else:
-            bag = ("search", "paint", "cursor", "search", "paint", "cursor", "notepad")
+            bag = ("search", "paint", "cursor", "search", "paint", "cursor", "search", "paint")
         kind = bag[i % len(bag)]
         i += 1
         title = monitor.foreground_title() or "this"
         if kind == "paint":
             possessor.doodle_in_paint(title)
         elif kind == "cursor":
-            possessor.possess_cursor_burst(1.8 + heat)
+            possessor.possess_cursor_burst(1.6 + 1.2 * heat)
         elif kind == "calc":
             possessor.open_app("calculator")
         elif kind == "notepad":
@@ -43,7 +42,8 @@ def _mischief(stop: threading.Event, overlay: Overlay) -> None:
         else:
             possessor.open_search()
         overlay.keep_front()
-        gap = 6.5 - 3.8 * heat
+        # 90s: ~4.6s gaps → ~1.8s gaps, more searches/paint/cursor
+        gap = 4.6 - 2.8 * heat
         waited = 0.0
         while waited < gap and not stop.is_set():
             if overlay.chatting():
