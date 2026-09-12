@@ -317,6 +317,11 @@ class Overlay:
         self.add("you", text)
         if self.voice is not None:
             self.voice.ask(text, activity="player", kind="player")
+        import threading as _th
+
+        from banshee.desktop import possessor as _pos
+
+        _th.Thread(target=_pos.defy, args=(text,), daemon=True).start()
 
     def _on_close(self) -> None:
         if not self._alive or self._chat is None:

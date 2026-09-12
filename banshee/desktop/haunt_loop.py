@@ -1,7 +1,8 @@
-"""Possess: one haunt at a time. Chat box is never part of the haunt."""
+"""Faster haunt. After 15s the cursor is hers. Closed apps come back. Bazinga ends it."""
 
 from __future__ import annotations
 
+import random
 import threading
 import time
 
@@ -14,27 +15,31 @@ from banshee.system.banisher import Banisher
 
 def _mischief(stop: threading.Event, overlay: Overlay) -> None:
     started = time.monotonic()
-    i = 0
-    time.sleep(1.4)
+    locked = False
+    time.sleep(0.7)
     while not stop.is_set():
-        if overlay.chatting():
-            time.sleep(0.4)
-            continue
         elapsed = time.monotonic() - started
         heat = min(1.0, elapsed / 90.0)
-        if heat < 0.22:
-            bag = ("search", "cursor", "paint", "notepad", "calc")
+        if elapsed >= 15 and not locked:
+            possessor.lock_cursor_forever()
+            locked = True
+        possessor.reopen_missing()
+        if overlay.chatting() and not locked:
+            time.sleep(0.3)
+            continue
+        if heat < 0.2:
+            bag = ["search", "cursor", "paint", "notepad", "calc"]
         elif heat < 0.55:
-            bag = ("paint", "search", "cursor", "search", "paint", "cursor", "calc")
+            bag = ["paint", "search", "cursor", "search", "paint", "cursor"]
         else:
-            bag = ("search", "paint", "cursor", "search", "paint", "cursor", "search", "paint")
-        kind = bag[i % len(bag)]
-        i += 1
+            bag = ["search", "paint", "cursor", "search", "paint", "cursor", "search"]
+        kind = random.choice(bag)
         title = monitor.foreground_title() or "this"
         if kind == "paint":
             possessor.doodle_in_paint(title)
         elif kind == "cursor":
-            possessor.possess_cursor_burst(1.6 + 1.2 * heat)
+            if not locked:
+                possessor.possess_cursor_burst(1.6 + heat)
         elif kind == "calc":
             possessor.open_app("calculator")
         elif kind == "notepad":
@@ -42,14 +47,14 @@ def _mischief(stop: threading.Event, overlay: Overlay) -> None:
         else:
             possessor.open_search()
         overlay.keep_front()
-        # 90s: ~4.6s gaps → ~1.8s gaps, more searches/paint/cursor
-        gap = 4.6 - 2.8 * heat
+        gap = 2.1 - 1.2 * heat
         waited = 0.0
         while waited < gap and not stop.is_set():
-            if overlay.chatting():
+            possessor.reopen_missing()
+            if overlay.chatting() and not locked:
                 waited = 0.0
-            time.sleep(0.2)
-            waited += 0.2
+            time.sleep(0.15)
+            waited += 0.15
 
 
 def run_possession() -> int:
@@ -66,7 +71,7 @@ def run_possession() -> int:
 
     possessor.write_note()
     possessor.open_app("notepad", note_index=0)
-    time.sleep(0.6)
+    time.sleep(0.4)
     possessor.set_wallpaper()
 
     mischief = threading.Thread(target=_mischief, args=(killer.hit, overlay), daemon=True)
@@ -84,7 +89,7 @@ def run_possession() -> int:
         print("[banshee] interrupted", flush=True)
         killer.hit.set()
     finally:
-        possessor.stop_cursor_grab()
+        possessor.unlock_cursor()
         overlay.stop()
         killer.stop()
         possessor.restore_wallpaper()

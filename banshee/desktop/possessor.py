@@ -72,6 +72,8 @@ _grab: threading.Event | None = None
 _grab_thread: threading.Thread | None = None
 _safe_zone = None  # callable -> (x0,y0,x1,y1) or None; cursor grab skips this box
 _pause_until = 0.0
+_cursor_locked = False
+_wanted: set[str] = set()
 
 
 def _screen() -> tuple[int, int]:
@@ -114,6 +116,7 @@ def open_search() -> None:
         _log(f"would open search {url}")
         return
     webbrowser.open(url)
+    _wanted.add("browser")
     _log("opened a haunted search")
 
 
@@ -131,8 +134,17 @@ def set_cursor_safe_zone(fn) -> None:
 def pause_cursor(seconds: float = 12.0) -> None:
     """Stop haunting the mouse so the human can use the chat box."""
     global _pause_until
+    if _cursor_locked:
+        return
     _pause_until = time.monotonic() + seconds
     stop_cursor_grab()
+
+
+def lock_cursor_forever() -> None:
+    global _cursor_locked
+    _cursor_locked = True
+    start_cursor_grab()
+    _log("cursor locked — bazinga is the only way out")
 
 
 def _in_safe_zone(x: int, y: int) -> bool:
@@ -181,6 +193,12 @@ def start_cursor_grab() -> None:
     _grab_thread = threading.Thread(target=_cursor_loop, args=(_grab,), daemon=True)
     _grab_thread.start()
     _log("cursor possessed")
+
+
+def unlock_cursor() -> None:
+    global _cursor_locked
+    _cursor_locked = False
+    stop_cursor_grab()
 
 
 def stop_cursor_grab() -> None:
@@ -312,33 +330,88 @@ def open_app(name: str = "notepad", note_index: int = 0) -> None:
             )
         args.append(str(path))
     subprocess.Popen(args, close_fds=True)
+    _wanted.add(exe)
     _log(f"opened {exe}")
 
 
 def doodle_in_paint(mock_line: str = "") -> None:
-    """Open Paint on a mocking doodle — one picture, playground only."""
-    from PIL import Image, ImageDraw, ImageFont
-
-    title = (mock_line or "you").strip()[:42]
+    """Open Paint and scribble with the real cursor. No pre-drawn blob."""
     if SAFE:
-        _log(f"would doodle in paint: {title}")
+        _log("would scribble in paint with the cursor")
         return
-    PLAYGROUND.mkdir(parents=True, exist_ok=True)
-    im = Image.new("RGB", (720, 420), (248, 236, 255))
-    d = ImageDraw.Draw(im)
-    d.rectangle((0, 0, 719, 419), outline=(90, 50, 120), width=6)
-    d.ellipse((270, 70, 450, 270), fill=(255, 255, 255), outline=(80, 40, 110), width=4)
-    d.ellipse((310, 130, 345, 165), fill=(20, 20, 30))
-    d.ellipse((375, 130, 410, 165), fill=(20, 20, 30))
-    d.arc((330, 175, 400, 220), 20, 160, fill=(80, 40, 110), width=3)
-    font = ImageFont.load_default()
-    d.text((40, 310), "now your system is mine", fill=(70, 30, 90), font=font)
-    d.text((40, 340), f"nice hobby: {title}", fill=(90, 40, 110), font=font)
-    d.text((40, 370), "— banshee", fill=(90, 40, 110), font=font)
-    path = PLAYGROUND / "banshee_doodle.png"
-    im.save(path)
-    subprocess.Popen(["mspaint.exe", str(path)], close_fds=True)
-    _log(f"opened paint doodle ({path.name})")
+    subprocess.Popen(["mspaint.exe"], close_fds=True)
+    _wanted.add("mspaint.exe")
+    time.sleep(1.1)
+    sw, sh = _screen()
+    x0 = sw // 2 - 90
+    y0 = sh // 2 - 20
+    _set_cursor(x0, y0)
+    time.sleep(0.08)
+    _user32().mouse_event(0x0002, 0, 0, 0, 0)
+    for i in range(48):
+        x = x0 + i * 7
+        y = y0 + int(36 * math.sin(i * 0.55)) + (12 if i % 4 == 0 else -10)
+        _set_cursor(x, y)
+        time.sleep(0.012)
+    _user32().mouse_event(0x0004, 0, 0, 0, 0)
+    _log("scribbled in paint")
+    if _cursor_locked:
+        start_cursor_grab()
+
+
+def _is_running(exe: str) -> bool:
+    try:
+        out = subprocess.check_output(
+            ["tasklist", "/FI", f"IMAGENAME eq {exe}"],
+            text=True,
+            errors="ignore",
+            creationflags=0x08000000,
+        )
+        return exe.lower() in out.lower() and "PID" in out
+    except Exception:
+        return False
+
+
+def reopen_missing() -> None:
+    """If the human closed a haunted app, open it again."""
+    mapping = {
+        "notepad.exe": lambda: open_app("notepad", note_index=1),
+        "calc.exe": lambda: open_app("calculator"),
+        "mspaint.exe": lambda: doodle_in_paint(),
+    }
+    browsers = ("msedge.exe", "chrome.exe", "firefox.exe", "brave.exe")
+    for exe, reopen in mapping.items():
+        if exe in _wanted and not _is_running(exe):
+            _log(f"{exe} was closed — opening it again")
+            reopen()
+    if "browser" in _wanted and not any(_is_running(b) for b in browsers):
+        _log("browser was closed — searching again")
+        open_search()
+
+
+def defy(text: str) -> None:
+    """If they dare her, she does the thing they said she couldn't."""
+    t = text.lower()
+    did = False
+    if any(w in t for w in ("browser", "chrome", "google", "search", "internet")):
+        open_search()
+        did = True
+    if any(w in t for w in ("cursor", "mouse", "pointer")):
+        if _cursor_locked:
+            start_cursor_grab()
+        else:
+            possess_cursor_burst(2.6)
+        did = True
+    if any(w in t for w in ("paint", "draw", "doodle")):
+        doodle_in_paint()
+        did = True
+    if any(w in t for w in ("stop", "leave", "annoying", "go away", "enough", "quit", "can't", "cant", "cannot")):
+        open_search()
+        doodle_in_paint()
+        open_app("calculator")
+        did = True
+    if did:
+        _log("proved them wrong")
 
 
 def cursor_in_panic_corner() -> bool:
