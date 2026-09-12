@@ -65,11 +65,11 @@ Type `bazinga` in the bottom-right chat box to banish her.
 For Software:
 
 # Screenshots (Add at least 3)
-![Screenshot1](Add screenshot 1 here with proper name)
-*Add caption explaining what this shows*
+![Screenshot1](assets/ghost/Screenshot%202026-09-12%20091758.png)
+*Possession in action: terminal logs show Paint scribble, cursor haunt, Calculator, and a unique Google search.*
 
-![Screenshot2](Add screenshot 2 here with proper name)
-*Add caption explaining what this shows*
+![Screenshot2](assets/ghost/Screenshot%202026-09-12%20092024.png)
+*The local brain: Ollama client and the BANSHEE system prompt in brain.py.*
 
 ![Screenshot3](Add screenshot 3 here with proper name)
 *Add caption explaining what this shows*
