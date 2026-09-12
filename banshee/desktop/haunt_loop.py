@@ -13,20 +13,29 @@ from banshee.system.banisher import Banisher
 
 
 def _mischief(stop: threading.Event, overlay: Overlay) -> None:
-    steps = ("paint", "cursor", "calc", "notepad", "search")
+    started = time.monotonic()
     i = 0
-    time.sleep(3.0)
+    time.sleep(2.5)
     while not stop.is_set():
         if overlay.chatting():
             time.sleep(0.4)
             continue
-        kind = steps[i % len(steps)]
+        elapsed = time.monotonic() - started
+        heat = min(1.0, elapsed / 90.0)
+        # later: more paint, search, cursor
+        if heat < 0.25:
+            bag = ("paint", "cursor", "notepad", "search", "calc")
+        elif heat < 0.6:
+            bag = ("paint", "search", "cursor", "search", "paint", "calc", "notepad")
+        else:
+            bag = ("search", "paint", "cursor", "search", "paint", "cursor", "notepad")
+        kind = bag[i % len(bag)]
         i += 1
         title = monitor.foreground_title() or "this"
         if kind == "paint":
             possessor.doodle_in_paint(title)
         elif kind == "cursor":
-            possessor.possess_cursor_burst(2.2)
+            possessor.possess_cursor_burst(1.8 + heat)
         elif kind == "calc":
             possessor.open_app("calculator")
         elif kind == "notepad":
@@ -34,8 +43,8 @@ def _mischief(stop: threading.Event, overlay: Overlay) -> None:
         else:
             possessor.open_search()
         overlay.keep_front()
+        gap = 6.5 - 3.8 * heat
         waited = 0.0
-        gap = 8.0
         while waited < gap and not stop.is_set():
             if overlay.chatting():
                 waited = 0.0

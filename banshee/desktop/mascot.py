@@ -87,7 +87,7 @@ class DesktopMascot:
         self.x = float(vx + sw * 0.4)
         self.y = float(vy + sh * 0.3)
         self.tx, self.ty = self.x, self.y
-        self._speed = 2.4
+        self._speed = 1.15
         self._t = 0.0
         self._talk = 0.0
         self._blink = 0.0
@@ -150,7 +150,7 @@ class DesktopMascot:
             return
         self._line = text
         self._talk = max(self._talk, 2.0)
-        self._hold = hold if hold is not None else max(5.0, min(10.0, 1.8 + len(text) * 0.08))
+        self._hold = hold if hold is not None else max(6.5, min(12.0, 2.4 + len(text) * 0.1))
         self._draw_bubble()
 
     def pin(self) -> None:
@@ -177,14 +177,16 @@ class DesktopMascot:
                 self._line = ""
                 self._clear_bubble()
 
-        if now >= self._next_drift:
+        if self._hold <= 0.6 and now >= self._next_drift:
             self._pick_target()
-            self._next_drift = now + random.uniform(0.7, 1.4)
+            self._next_drift = now + random.uniform(2.0, 3.4)
 
-        k = min(1.0, dt * self._speed)
+        # crawl while the bubble is up so the user can read it
+        rate = 0.35 if self._hold > 0.5 else self._speed
+        k = min(1.0, dt * rate)
         self.x += (self.tx - self.x) * k
         self.y += (self.ty - self.y) * k
-        bob = math.sin(self._t * 2.6) * 8.0
+        bob = math.sin(self._t * 1.8) * 5.0
 
         chat_x = self.vx + self.sw - 300
         chat_y = self.vy + self.sh - 230
@@ -205,7 +207,7 @@ class DesktopMascot:
             if kind != self._kind:
                 self._kind = kind
                 self.canvas.itemconfigure(self._sprite, image=self._photos[kind])
-            gy = WIN_H - 70 + math.sin(self._t * 3.5) * 3
+            gy = WIN_H - 70 + math.sin(self._t * 2.2) * 2
             self.canvas.coords(self._sprite, WIN_W // 2, gy)
         except tk.TclError:
             pass
@@ -263,12 +265,10 @@ class DesktopMascot:
                 mx, my = possessor._cursor()
                 self.tx = mx - WIN_W / 2
                 self.ty = my - WIN_H / 2
-                self._speed = random.uniform(3.0, 5.5)
+                self._speed = random.uniform(1.0, 1.6)
                 return
             except Exception:
                 pass
         self.tx = random.uniform(self.vx + 8, self.vx + max(40, self.sw - WIN_W - 8))
         self.ty = random.uniform(self.vy + 8, self.vy + max(40, self.sh - WIN_H - 70))
-        self._speed = random.uniform(2.2, 4.8)
-        if roll > 0.85:
-            self._speed = 7.0
+        self._speed = random.uniform(0.85, 1.55)
