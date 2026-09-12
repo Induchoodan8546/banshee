@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import threading
 import time
 import tkinter as tk
 from tkinter import font as tkfont
@@ -13,7 +14,7 @@ from banshee.desktop.mascot import DesktopMascot
 from banshee.room.voice import Voice
 from banshee.system.banisher import Banisher
 
-BOX_W, BOX_H = 280, 176
+BOX_W, BOX_H = 300, 210
 
 
 class Overlay:
@@ -26,6 +27,8 @@ class Overlay:
         self.killer: Banisher | None = None
         self.mascot: DesktopMascot | None = None
         self._alive = True
+        self._mode_hint: tk.Label | None = None
+        self._speak_btn: tk.Button | None = None
         self._next_ambient = 0.0
         self._chat_box = (0, 0, 0, 0)
         self._chatting_until = 0.0
@@ -46,6 +49,10 @@ class Overlay:
             self._log.configure(state="disabled")
         except tk.TclError:
             pass
+        if who == "banshee":
+            from banshee.voice_io import maybe_speak
+
+            maybe_speak(text)
 
     def set_line(self, text: str) -> None:
         self.add("banshee", text)
@@ -202,6 +209,17 @@ class Overlay:
             insertbackground="#f4e8ff",
             relief="flat",
         )
+        modes = tk.Frame(chat, bg="#1a1028")
+        modes.pack(fill=tk.X, padx=8)
+        self._mode_label = tk.StringVar(value="text")
+        tiny_btn = {"bg": "#3a2450", "fg": "#f4e8ff", "relief": "flat", "font": tiny}
+        tk.Button(modes, text="text", command=lambda: self._set_mode(False), **tiny_btn).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Button(modes, text="audio", command=lambda: self._set_mode(True), **tiny_btn).pack(side=tk.LEFT, padx=(0, 4))
+        self._speak_btn = tk.Button(modes, text="speak", command=self._listen, **tiny_btn)
+        self._speak_btn.pack(side=tk.LEFT)
+        self._mode_hint = tk.Label(modes, text="mode: text", bg="#1a1028", fg="#9a7ab8", font=tiny)
+        self._mode_hint.pack(side=tk.LEFT, padx=8)
+
         self._entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
         self._entry.bind("<Return>", self._send)
         self._entry.bind("<FocusIn>", self._on_user_chat)
@@ -302,11 +320,48 @@ class Overlay:
     def chatting(self) -> bool:
         return time.monotonic() < self._chatting_until
 
+    def _set_mode(self, audio: bool) -> None:
+        from banshee.voice_io import set_audio_mode
+
+        set_audio_mode(audio)
+        if self._mode_hint is not None:
+            self._mode_hint.config(text="mode: audio" if audio else "mode: text")
+        self.add("banshee", "i'll hiss in your speakers." if audio else "fine. text only.")
+
+    def _listen(self) -> None:
+        self._on_user_chat()
+        if self._speak_btn is not None:
+            self._speak_btn.config(text="...")
+
+        def _job() -> None:
+            from banshee.voice_io import listen_once
+
+            heard = listen_once()
+            self._on_ui(lambda: self._finish_listen(heard))
+
+        threading.Thread(target=_job, daemon=True).start()
+
+    def _finish_listen(self, heard: str) -> None:
+        if self._speak_btn is not None:
+            self._speak_btn.config(text="speak")
+        if not heard:
+            self.add("banshee", "i didn't catch that. try again.")
+            return
+        if self._entry is not None:
+            self._entry.delete(0, tk.END)
+        self._submit(heard)
+
     def _send(self, event: object | None = None) -> None:
         if self._entry is None:
             return
         text = self._entry.get().strip()
         self._entry.delete(0, tk.END)
+        if not text:
+            return
+        self._submit(text)
+
+    def _submit(self, text: str) -> None:
+        text = (text or "").strip()
         if not text:
             return
         if text.lower().replace(" ", "") == KILL_SPELL:

@@ -2,4 +2,8 @@ ollama
 pygame
 pillow
 pynput
+pyttsx3
+SpeechRecognition
+PyAudio
+
 

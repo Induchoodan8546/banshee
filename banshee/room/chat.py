@@ -34,6 +34,24 @@ class ChatDock:
             return
         self.log.append((who, text))
         self.log = self.log[-5:]
+        if who == "banshee":
+            from banshee.voice_io import maybe_speak
+
+            maybe_speak(text)
+
+    def _btn_rects(self) -> dict[str, pygame.Rect]:
+        y = ROOM_H + 4
+        return {
+            "text": pygame.Rect(WINDOW_W - 210, y, 52, 18),
+            "audio": pygame.Rect(WINDOW_W - 154, y, 56, 18),
+            "speak": pygame.Rect(WINDOW_W - 94, y, 56, 18),
+        }
+
+    def click_button(self, pos: tuple[int, int]) -> str | None:
+        for name, rect in self._btn_rects().items():
+            if rect.collidepoint(pos):
+                return name
+        return None
 
     def contains(self, pos: tuple[int, int]) -> bool:
         return self.rect.collidepoint(pos)
@@ -67,6 +85,9 @@ class ChatDock:
         dock = self.rect
         pygame.draw.rect(surf, BG, dock)
         pygame.draw.line(surf, LINE, (0, ROOM_H), (WINDOW_W, ROOM_H), 2)
+        for name, rect in self._btn_rects().items():
+            pygame.draw.rect(surf, (40, 24, 64), rect, border_radius=3)
+            surf.blit(self.small.render(name, True, CREAM), (rect.x + 6, rect.y + 1))
         y = ROOM_H + 8
         if not self.log:
             hint = "she will talk when she arrives" if not self.enabled else "say something. she is listening."

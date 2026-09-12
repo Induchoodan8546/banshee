@@ -60,6 +60,31 @@ def run_house(*, possess_on_close: bool = False) -> str:
                 request_close()
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if chat.contains(event.pos):
+                    btn = chat.click_button(event.pos)
+                    if btn == "text":
+                        from banshee.voice_io import set_audio_mode
+
+                        set_audio_mode(False)
+                        chat.add("banshee", "fine. text only.")
+                    elif btn == "audio":
+                        from banshee.voice_io import set_audio_mode
+
+                        set_audio_mode(True)
+                        chat.add("banshee", "i'll hiss in your speakers.")
+                    elif btn == "speak":
+                        import threading
+
+                        def _mic() -> None:
+                            from banshee.voice_io import listen_once
+
+                            heard = listen_once()
+                            if heard:
+                                chat.add("you", heard)
+                                voice.ask(heard, activity="player", kind="player")
+                            else:
+                                chat.add("banshee", "i didn't catch that.")
+
+                        threading.Thread(target=_mic, daemon=True).start()
                     chat.focus = True
                     pygame.key.start_text_input()
                     continue
