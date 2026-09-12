@@ -28,6 +28,7 @@ class Overlay:
         self._alive = True
         self._next_ambient = 0.0
         self._chat_box = (0, 0, 0, 0)
+        self._chatting_until = 0.0
 
     def attach(self, voice: Voice, killer: Banisher) -> None:
         self.voice = voice
@@ -138,12 +139,12 @@ class Overlay:
             ):
                 title = monitor.foreground_title() or "the desktop"
                 self.voice.ask(
-                    f"you are a blob on the real desktop. the front window is: {title}. "
-                    "one short in-character line. use spaces.",
-                    activity=f"foreground: {title}",
+                    f"the human is using this window right now: {title}. "
+                    "mock what they are doing in one short sentence. stay on that topic.",
+                    activity=f"they are in: {title}",
                     kind="ambient",
                 )
-                self._next_ambient = now + random.uniform(6.0, 9.0)
+                self._next_ambient = now + random.uniform(7.0, 11.0)
         if self.mascot is not None:
             self.mascot.step()
         self._remember_chat_rect()
@@ -203,6 +204,11 @@ class Overlay:
         )
         self._entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
         self._entry.bind("<Return>", self._send)
+        self._entry.bind("<FocusIn>", self._on_user_chat)
+        self._entry.bind("<Key>", self._on_user_chat)
+        self._entry.bind("<Button-1>", self._on_user_chat)
+        chat.bind("<Button-1>", self._on_user_chat)
+        chat.bind("<FocusIn>", self._on_user_chat)
         tk.Button(
             row,
             text="say",
@@ -286,6 +292,15 @@ class Overlay:
                 chat.lift()
         except tk.TclError:
             pass
+
+    def _on_user_chat(self, event: object | None = None) -> None:
+        self._chatting_until = time.monotonic() + 14.0
+        from banshee.desktop import possessor as _pos
+
+        _pos.pause_cursor(14.0)
+
+    def chatting(self) -> bool:
+        return time.monotonic() < self._chatting_until
 
     def _send(self, event: object | None = None) -> None:
         if self._entry is None:

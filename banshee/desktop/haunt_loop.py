@@ -1,36 +1,46 @@
-"""Possess: notepad, wallpaper, then tk mascot + chat (always on top)."""
+"""Possess: one haunt at a time. Chat box is never part of the haunt."""
 
 from __future__ import annotations
 
-import random
 import threading
 import time
 
 from banshee import config
-from banshee.desktop import possessor
+from banshee.desktop import monitor, possessor
 from banshee.desktop.overlay import Overlay
 from banshee.room.voice import Voice
 from banshee.system.banisher import Banisher
 
 
 def _mischief(stop: threading.Event, overlay: Overlay) -> None:
-    time.sleep(2.2)
+    steps = ("paint", "cursor", "calc", "notepad", "search")
+    i = 0
+    time.sleep(3.0)
     while not stop.is_set():
-        roll = random.random()
-        if roll < 0.42:
-            possessor.possess_cursor_burst(random.uniform(2.0, 2.8))
-        elif roll < 0.78:
-            name = random.choice(["notepad", "calculator", "paint"])
-            possessor.open_app(name, note_index=random.randint(0, 4))
-            overlay.keep_front()
+        if overlay.chatting():
+            time.sleep(0.4)
+            continue
+        kind = steps[i % len(steps)]
+        i += 1
+        title = monitor.foreground_title() or "this"
+        if kind == "paint":
+            possessor.doodle_in_paint(title)
+        elif kind == "cursor":
+            possessor.possess_cursor_burst(2.2)
+        elif kind == "calc":
+            possessor.open_app("calculator")
+        elif kind == "notepad":
+            possessor.open_app("notepad", note_index=1)
         else:
             possessor.open_search()
-            overlay.keep_front()
+        overlay.keep_front()
         waited = 0.0
-        gap = random.uniform(5.0, 6.5)
+        gap = 8.0
         while waited < gap and not stop.is_set():
-            time.sleep(0.1)
-            waited += 0.1
+            if overlay.chatting():
+                waited = 0.0
+            time.sleep(0.2)
+            waited += 0.2
 
 
 def run_possession() -> int:

@@ -71,6 +71,7 @@ def _set_cursor(x: int, y: int) -> None:
 _grab: threading.Event | None = None
 _grab_thread: threading.Thread | None = None
 _safe_zone = None  # callable -> (x0,y0,x1,y1) or None; cursor grab skips this box
+_pause_until = 0.0
 
 
 def _screen() -> tuple[int, int]:
@@ -127,6 +128,13 @@ def set_cursor_safe_zone(fn) -> None:
     _safe_zone = fn
 
 
+def pause_cursor(seconds: float = 12.0) -> None:
+    """Stop haunting the mouse so the human can use the chat box."""
+    global _pause_until
+    _pause_until = time.monotonic() + seconds
+    stop_cursor_grab()
+
+
 def _in_safe_zone(x: int, y: int) -> bool:
     fn = _safe_zone
     if fn is None:
@@ -138,12 +146,17 @@ def _in_safe_zone(x: int, y: int) -> bool:
     if not box:
         return False
     x0, y0, x1, y1 = box
-    pad = 8
+    pad = 140
     return (x0 - pad) <= x <= (x1 + pad) and (y0 - pad) <= y <= (y1 + pad)
 
 
 def possess_cursor_burst(seconds: float = 2.4, on_end=None, overlay=None) -> None:
     """Brief cursor haunt. Never drags the pointer into the chat box."""
+    if time.monotonic() < _pause_until:
+        _log("skip grab — chat is in use")
+        if on_end is not None:
+            on_end()
+        return
     start_cursor_grab()
 
     def _release() -> None:
@@ -188,6 +201,9 @@ def _cursor_loop(stop: threading.Event) -> None:
     next_turn = time.monotonic()
     while not stop.is_set():
         now = time.monotonic()
+        if now < _pause_until:
+            time.sleep(0.05)
+            continue
         if now >= next_turn:
             angle += random.uniform(-1.2, 1.2)
             speed = random.uniform(6.0, 16.0)
@@ -297,6 +313,32 @@ def open_app(name: str = "notepad", note_index: int = 0) -> None:
         args.append(str(path))
     subprocess.Popen(args, close_fds=True)
     _log(f"opened {exe}")
+
+
+def doodle_in_paint(mock_line: str = "") -> None:
+    """Open Paint on a mocking doodle — one picture, playground only."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    title = (mock_line or "you").strip()[:42]
+    if SAFE:
+        _log(f"would doodle in paint: {title}")
+        return
+    PLAYGROUND.mkdir(parents=True, exist_ok=True)
+    im = Image.new("RGB", (720, 420), (248, 236, 255))
+    d = ImageDraw.Draw(im)
+    d.rectangle((0, 0, 719, 419), outline=(90, 50, 120), width=6)
+    d.ellipse((270, 70, 450, 270), fill=(255, 255, 255), outline=(80, 40, 110), width=4)
+    d.ellipse((310, 130, 345, 165), fill=(20, 20, 30))
+    d.ellipse((375, 130, 410, 165), fill=(20, 20, 30))
+    d.arc((330, 175, 400, 220), 20, 160, fill=(80, 40, 110), width=3)
+    font = ImageFont.load_default()
+    d.text((40, 310), "now your system is mine", fill=(70, 30, 90), font=font)
+    d.text((40, 340), f"nice hobby: {title}", fill=(90, 40, 110), font=font)
+    d.text((40, 370), "— banshee", fill=(90, 40, 110), font=font)
+    path = PLAYGROUND / "banshee_doodle.png"
+    im.save(path)
+    subprocess.Popen(["mspaint.exe", str(path)], close_fds=True)
+    _log(f"opened paint doodle ({path.name})")
 
 
 def cursor_in_panic_corner() -> bool:
