@@ -78,8 +78,8 @@ For Software:
 *Act II — she scribbles in Paint, talks in a bubble, and the chat box stays bottom-right.*
 
 # Diagrams
-![Workflow](Add your workflow/architecture diagram here)
-*Add caption explaining your workflow*
+![Workflow](assets/ui/workflow.png)
+*Session workflow: boot into the pygame bedroom, close the window to possess the desktop, type bazinga to leave. Local Ollama is the only brain.*
 
 
 
