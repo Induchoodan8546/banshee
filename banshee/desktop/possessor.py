@@ -121,16 +121,11 @@ def nudge_brief() -> None:
 
 
 def possess_cursor_burst(seconds: float = 2.4, on_end=None, overlay=None) -> None:
-    """Yank once, then park the cursor on the chat box so they can type."""
+    """Do not steal the mouse for chatting — hand it to the text box."""
     stop_cursor_grab()
-    if not SAFE:
-        move_cursor()
     if overlay is not None:
         overlay.seize_input()
-        pos = overlay.cursor_target()
-        if pos and not SAFE:
-            _set_cursor(int(pos[0]), int(pos[1]))
-        _log("cursor handed to chat box")
+        _log("cursor given to chat box")
     else:
         start_cursor_grab()
 

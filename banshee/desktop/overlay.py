@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import tkinter as tk
 from tkinter import font as tkfont
 
@@ -23,6 +24,7 @@ class Overlay:
         self.killer: Banisher | None = None
         self.mascot: DesktopMascot | None = None
         self._alive = True
+        self._hold_focus_until = 0.0
 
     def attach(self, voice: Voice, killer: Banisher) -> None:
         self.voice = voice
@@ -66,28 +68,8 @@ class Overlay:
             pass
 
     def seize_input(self) -> None:
-        def _go() -> None:
-            self._pin_chat()
-            chat = self._chat
-            if chat is None:
-                return
-            try:
-                chat.deiconify()
-                chat.lift()
-                chat.focus_force()
-                if self._entry is not None:
-                    self._entry.focus_force()
-                    self._entry.icursor("end")
-                pos = self.cursor_target()
-                if pos:
-                    from banshee.desktop import possessor
-
-                    if not possessor.SAFE:
-                        possessor._set_cursor(pos[0], pos[1])
-            except tk.TclError:
-                pass
-
-        self._on_ui(_go)
+        self._hold_focus_until = time.monotonic() + 4.0
+        self._on_ui(lambda: self._focus_chat(hard=True))
 
     def release_input(self) -> None:
         self._on_ui(self._pin_chat)
@@ -133,7 +115,10 @@ class Overlay:
                     self.mascot.talk()
         if self.mascot is not None:
             self.mascot.step()
-        self._pin_chat()
+        if time.monotonic() < self._hold_focus_until:
+            self._focus_chat(hard=False)
+        else:
+            self._pin_chat()
         root.after(33, self._tick)
 
     def _build(self) -> None:
@@ -198,6 +183,53 @@ class Overlay:
         chat.update_idletasks()
         self._pin_chat()
         self._entry.focus_set()
+
+    def _chat_hwnd(self) -> int:
+        chat = self._chat
+        if chat is None:
+            return 0
+        import ctypes
+
+        wid = int(chat.winfo_id())
+        user32 = ctypes.windll.user32
+        hwnd = int(user32.GetAncestor(wid, 2) or user32.GetParent(wid) or wid)
+        return hwnd
+
+    def _force_foreground(self) -> None:
+        hwnd = self._chat_hwnd()
+        if not hwnd:
+            return
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        user32.ShowWindow(hwnd, 9)
+        user32.keybd_event(0x12, 0, 0, 0)
+        user32.SetForegroundWindow(hwnd)
+        user32.keybd_event(0x12, 0, 2, 0)
+        user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+
+    def _focus_chat(self, hard: bool = False) -> None:
+        chat = self._chat
+        if chat is None or not self._alive:
+            return
+        try:
+            chat.deiconify()
+            chat.attributes("-topmost", True)
+            chat.lift()
+            if hard:
+                self._force_foreground()
+            if self._entry is not None:
+                self._entry.focus_set()
+                self._entry.focus_force()
+            if hard:
+                pos = self.cursor_target()
+                if pos:
+                    from banshee.desktop import possessor
+
+                    if not possessor.SAFE:
+                        possessor._set_cursor(pos[0], pos[1])
+        except tk.TclError:
+            pass
 
     def _pin_chat(self) -> None:
         chat = self._chat
