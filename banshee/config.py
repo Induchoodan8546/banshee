@@ -46,6 +46,8 @@ ALLOWED_APPS = {
     "notepad": "notepad.exe",
     "calculator": "calc.exe",
     "paint": "mspaint.exe",
+    "wordpad": "write.exe",
+    "charmap": "charmap.exe",
 }
 SEARCH_URLS = [
     "https://www.google.com/search?q=how+to+remove+a+cartoon+ghost+from+windows",

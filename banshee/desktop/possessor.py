@@ -74,7 +74,7 @@ _grab_thread: threading.Thread | None = None
 _safe_zone = None  # callable -> (x0,y0,x1,y1) or None; cursor grab skips this box
 _pause_until = 0.0
 _cursor_locked = False
-_wanted: set[str] = set()
+_wanted: set[str] = set()  # app keys: notepad, calculator, paint, ...
 
 
 def _screen() -> tuple[int, int]:
@@ -370,12 +370,14 @@ def restore_wallpaper() -> None:
 
 
 def open_app(name: str = "notepad", note_index: int = 0) -> None:
-    exe = ALLOWED_APPS.get(name.lower().strip(), ALLOWED_APPS["notepad"])
+    key = name.lower().strip()
+    exe = ALLOWED_APPS.get(key, ALLOWED_APPS["notepad"])
     if SAFE:
-        _log(f"would open {exe}")
+        _log(f"would open {key} ({exe})")
+        _wanted.add(key)
         return
     args = [exe]
-    if exe == "notepad.exe":
+    if key == "notepad":
         PLAYGROUND.mkdir(parents=True, exist_ok=True)
         if note_index <= 0:
             path = PLAYGROUND / NOTE_NAME
@@ -389,46 +391,88 @@ def open_app(name: str = "notepad", note_index: int = 0) -> None:
             )
         args.append(str(path))
     subprocess.Popen(args, close_fds=True)
-    _wanted.add(exe)
-    _log(f"opened {exe}")
+    _wanted.add(key)
+    _log(f"opened {key}")
 
 
 def doodle_in_paint(mock_line: str = "") -> None:
-    """Open Paint, wait for it, then drag-scribble on the canvas."""
+    """Open Paint, maximize, then actually drag-draw with pynput."""
     if SAFE:
         _log("would scribble in paint with the cursor")
         return
     paused = _cursor_locked
     stop_cursor_grab()
     subprocess.Popen(["mspaint.exe"], close_fds=True)
-    _wanted.add("mspaint.exe")
+    _wanted.add("paint")
     hwnd = 0
-    for _ in range(50):
+    for _ in range(60):
         hwnd = _find_window("paint")
         if hwnd:
             break
-        time.sleep(0.12)
+        time.sleep(0.1)
     if not hwnd:
         _log("paint window not found")
-        if paused:
+        if paused or _cursor_locked:
             start_cursor_grab()
         return
+    u = _user32()
+    u.ShowWindow(hwnd, 3)  # maximize
     _foreground(hwnd)
-    time.sleep(0.35)
+    time.sleep(1.0)
     rect = _window_rect(hwnd)
     if not rect:
-        if paused:
+        if paused or _cursor_locked:
             start_cursor_grab()
         return
     left, top, right, bottom = rect
-    w, h = right - left, bottom - top
-    # skip ribbon: draw in the lower-middle canvas
-    x0 = left + int(w * 0.28)
-    y0 = top + int(h * 0.58)
-    _drag_scribble(x0, y0)
-    _log("scribbled in paint")
+    w, h = max(100, right - left), max(100, bottom - top)
+    # Win11 ribbon is tall — canvas is the lower 55%
+    cx = left + w // 2
+    cy = top + int(h * 0.62)
+    try:
+        _pynput_scribble(cx, cy)
+        _log("scribbled in paint")
+    except Exception as exc:
+        _log(f"paint scribble failed: {exc}")
     if paused or _cursor_locked:
         start_cursor_grab()
+
+
+def _pynput_scribble(cx: int, cy: int) -> None:
+    from pynput.mouse import Button, Controller
+
+    mouse = Controller()
+    mouse.position = (cx, cy)
+    time.sleep(0.12)
+    mouse.click(Button.left, 1)
+    time.sleep(0.18)
+    mouse.position = (cx - 40, cy)
+    time.sleep(0.06)
+    mouse.press(Button.left)
+    # jagged scribble, not a circle
+    pts = []
+    for i in range(70):
+        x = cx - 80 + i * 5
+        y = cy + int(45 * math.sin(i * 0.35)) + (20 if i % 6 == 0 else -16)
+        pts.append((x, y))
+    for x, y in pts:
+        mouse.position = (x, y)
+        time.sleep(0.02)
+    mouse.release(Button.left)
+    time.sleep(0.1)
+    # second stroke: a big X
+    mouse.position = (cx - 50, cy - 40)
+    mouse.press(Button.left)
+    for t in range(20):
+        mouse.position = (cx - 50 + t * 6, cy - 40 + t * 5)
+        time.sleep(0.018)
+    mouse.release(Button.left)
+    mouse.position = (cx + 70, cy - 40)
+    mouse.press(Button.left)
+    for t in range(20):
+        mouse.position = (cx + 70 - t * 6, cy - 40 + t * 5)
+        time.sleep(0.018)
+    mouse.release(Button.left)
 
 
 def _find_window(title_part: str) -> int:
@@ -531,21 +575,52 @@ def _is_running(exe: str) -> bool:
         return False
 
 
+_APP_PROCS = {
+    "notepad": ("notepad.exe",),
+    "calculator": ("calc.exe", "calculator.exe", "applicationframehost.exe"),
+    "paint": ("mspaint.exe",),
+    "wordpad": ("wordpad.exe", "write.exe"),
+    "charmap": ("charmap.exe",),
+}
+_APP_TITLES = {
+    "notepad": "notepad",
+    "calculator": "calculator",
+    "paint": "paint",
+    "wordpad": "wordpad",
+    "charmap": "character map",
+}
+
+
+def _app_alive(key: str) -> bool:
+    title = _APP_TITLES.get(key)
+    if title and _find_window(title):
+        return True
+    if key == "calculator" and _find_window("calc"):
+        return True
+    for proc in _APP_PROCS.get(key, ()):
+        if key == "calculator" and proc == "applicationframehost.exe":
+            continue
+        if _is_running(proc):
+            return True
+    return False
+
+
 def reopen_missing() -> None:
     """If the human closed a haunted app, open it again."""
-    mapping = {
-        "notepad.exe": lambda: open_app("notepad", note_index=1),
-        "calc.exe": lambda: open_app("calculator"),
-        "mspaint.exe": lambda: doodle_in_paint(),
-    }
-    browsers = ("msedge.exe", "chrome.exe", "firefox.exe", "brave.exe")
-    for exe, reopen in mapping.items():
-        if exe in _wanted and not _is_running(exe):
-            _log(f"{exe} was closed — opening it again")
-            reopen()
-    if "browser" in _wanted and not any(_is_running(b) for b in browsers):
-        _log("browser was closed — searching again")
-        open_search()
+    for key in list(_wanted):
+        if key == "browser":
+            browsers = ("msedge.exe", "chrome.exe", "firefox.exe", "brave.exe")
+            if not any(_is_running(b) for b in browsers) and not _find_window("google"):
+                _log("browser was closed — searching again")
+                open_search()
+            continue
+        if _app_alive(key):
+            continue
+        _log(f"{key} was closed — opening it again")
+        if key == "paint":
+            subprocess.Popen(["mspaint.exe"], close_fds=True)
+        else:
+            open_app(key, note_index=1)
 
 
 def defy(text: str) -> None:

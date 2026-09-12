@@ -16,6 +16,7 @@ from banshee.system.banisher import Banisher
 def _mischief(stop: threading.Event, overlay: Overlay, voice: Voice) -> None:
     started = time.monotonic()
     locked = False
+    i = 0
     time.sleep(0.7)
     while not stop.is_set():
         elapsed = time.monotonic() - started
@@ -27,23 +28,28 @@ def _mischief(stop: threading.Event, overlay: Overlay, voice: Voice) -> None:
         if overlay.chatting() and not locked:
             time.sleep(0.3)
             continue
-        if heat < 0.2:
-            bag = ["search", "cursor", "paint", "notepad", "calc"]
-        elif heat < 0.55:
-            bag = ["paint", "search", "cursor", "search", "paint", "cursor"]
-        else:
-            bag = ["search", "paint", "cursor", "search", "paint", "cursor", "search"]
-        kind = random.choice(bag)
+        cycle = [
+            "notepad",
+            "search",
+            "paint",
+            "calculator",
+            "cursor",
+            "wordpad",
+            "search",
+            "paint",
+            "charmap",
+            "search",
+        ]
+        kind = cycle[i % len(cycle)]
+        i += 1
         title = monitor.foreground_title() or "this"
         if kind == "paint":
             possessor.doodle_in_paint(title)
         elif kind == "cursor":
             if not locked:
                 possessor.possess_cursor_burst(1.6 + heat)
-        elif kind == "calc":
-            possessor.open_app("calculator")
-        elif kind == "notepad":
-            possessor.open_app("notepad", note_index=1)
+        elif kind in ("calculator", "notepad", "wordpad", "charmap"):
+            possessor.open_app(kind, note_index=1 if kind == "notepad" else 0)
         else:
             brain = None
             if not voice.busy and not voice.talking_to_player():
