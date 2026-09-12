@@ -2,47 +2,64 @@
 
 
 
-# [Project Name] 🎯
+# BANSHEE 🎯
 
 
 ## Basic Details
-### Team Name: [Name]
+### Team Name: BANSHEE
 
 
 ### Team Members
-- Team Lead: [Name] - [College]
-- Member 2: [Name] - [College]
-- Member 3: [Name] - [College]
+- Team Lead: Induchoodan VS
+
 
 ### Project Description
-[2-3 lines about what your project does]
+BANSHEE is a cartoon blob ghost who starts inside one pygame bedroom, talks through a local Ollama model, then climbs onto your real Windows desktop when you close the window. She wanders as a mascot, chats (text or creepy goblin audio), opens harmless apps, and only leaves if you type bazinga.
 
 ### The Problem (that doesn't exist)
-[What ridiculous problem are you solving?]
+Your laptop is too obedient. Nothing haunts the taskbar. Closing a window actually closes things. That is unacceptable.
 
 ### The Solution (that nobody asked for)
-[How are you solving it? Keep it fun!]
+A local poltergeist with free will. You poke furniture, she lands, she talks. You close the room — that is consent. She possesses the desktop, comments on whatever you are doing, and pretends your cursor asked her for directions. The kill spell is the word bazinga.
 
 ## Technical Details
 ### Technologies/Components Used
 For Software:
-- [Languages used]
-- [Frameworks used]
-- [Libraries used]
-- [Tools used]
+- Python 3.11
+- pygame (the one cartoon bedroom)
+- tkinter (desktop mascot + chat box)
+- Ollama + llama3.2:3b (local brain, no cloud)
+- pyttsx3 / edge-tts (goblin voice)
+- SpeechRecognition + PyAudio (your mic)
+- pynput, Pillow, ctypes / Win32 (cursor, wallpaper, apps)
 
-For Hardware:
-- [List main components]
-- [List specifications]
-- [List tools required]
+
 
 ### Implementation
 For Software:
 # Installation
-[commands]
+```
+ollama pull llama3.2:3b
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
 # Run
-[commands]
+```
+python main.py
+```
+Room only (no desktop haunt):
+```
+python main.py --house-only
+```
+Fake haunt on someone else's laptop:
+```
+python main.py --safe
+```
+Or double-click `run.bat` / `run-safe.bat`.
+
+Type `bazinga` in the bottom-right chat box to banish her.
 
 ### Project Documentation
 For Software:
@@ -63,13 +80,6 @@ For Software:
 
 For Hardware:
 
-# Schematic & Circuit
-![Circuit](Add your circuit diagram here)
-*Add caption explaining connections*
-
-![Schematic](Add your schematic diagram here)
-*Add caption explaining the schematic*
-
 # Build Photos
 ![Components](Add photo of your components here)
 *List out all components shown*
@@ -89,15 +99,10 @@ For Hardware:
 [Add any extra demo materials/links]
 
 ## Team Contributions
-- [Name 1]: [Specific contributions]
-- [Name 2]: [Specific contributions]
-- [Name 3]: [Specific contributions]
+- Induchoodan VS: everything — room, local LLM, desktop possession, mascot, chat, audio
 
 ---
 Made with ❤️ at TinkerHub Useless Projects 
 
 ![Static Badge](https://img.shields.io/badge/TinkerHub-24?color=%23000000&link=https%3A%2F%2Fwww.tinkerhub.org%2F)
 ![Static Badge](https://img.shields.io/badge/UselessProjects--26-26?link=https%3A%2F%2Ftinkerhub.org%2Fevents%2F1M8ORET9A1%2Fuseless-projects-3.0)
-
-
-
