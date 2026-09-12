@@ -71,8 +71,11 @@ For Software:
 ![Screenshot2](assets/ghost/Screenshot%202026-09-12%20092024.png)
 *The local brain: Ollama client and the BANSHEE system prompt in brain.py.*
 
-![Screenshot3](Add screenshot 3 here with proper name)
-*Add caption explaining what this shows*
+![Screenshot3](assets/ghost/Screenshot%202026-09-12%20092414.png)
+*Act I — the pixel bedroom. The blob floats by the night window.*
+
+![Screenshot4](assets/ghost/Screenshot%202026-09-12%20092427.png)
+*Act II — she scribbles in Paint, talks in a bubble, and the chat box stays bottom-right.*
 
 # Diagrams
 ![Workflow](Add your workflow/architecture diagram here)
@@ -82,8 +85,8 @@ For Software:
 
 ### Project Demo
 # Video
-[Add your demo video link here]
-*Explain what the video demonstrates*
+[banshee.mp4](assets/ghost/banshee.mp4)
+*Demo of the haunted bedroom and desktop possession (mascot, chat, Paint, apps).*
 
 # Additional Demos
 [Add any extra demo materials/links]

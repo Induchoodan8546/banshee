@@ -174,6 +174,24 @@ def build():
             "The local brain in brain.py: Ollama client, config imports, and the BANSHEE system prompt.",
             W,
         ),
+        *shot(
+            r"c:\Users\induc\uselessproject_3.0\banshee\assets\ghost\Screenshot 2026-09-12 092414.png",
+            st,
+            "Screenshot 3 — Act I: the pixel bedroom. The blob floats by the night window.",
+            W,
+        ),
+        *shot(
+            r"c:\Users\induc\uselessproject_3.0\banshee\assets\ghost\Screenshot 2026-09-12 092427.png",
+            st,
+            "Screenshot 4 — Act II: she scribbles in Paint, talks in a bubble, chat box stays bottom-right.",
+            W,
+        ),
+        P("Project demo video", st["H2b"]),
+        P(
+            "A full playthrough is in the repo at <b>assets/ghost/banshee.mp4</b>. "
+            "It shows the bedroom haunt and the desktop possession (mascot, chat, Paint, apps).",
+            st["BodyJ"],
+        ),
         P("3. How the program is structured (simple picture)", st["H1b"]),
         P(
             "Think of three layers. <b>main.py</b> is the front door. It reads flags (--house-only, --safe, --chat) "
