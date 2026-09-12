@@ -34,7 +34,6 @@ def _mischief(stop: threading.Event, overlay: Overlay, voice: Voice) -> None:
             "paint",
             "calculator",
             "cursor",
-            "wordpad",
             "search",
             "paint",
             "charmap",
@@ -48,7 +47,7 @@ def _mischief(stop: threading.Event, overlay: Overlay, voice: Voice) -> None:
         elif kind == "cursor":
             if not locked:
                 possessor.possess_cursor_burst(1.6 + heat)
-        elif kind in ("calculator", "notepad", "wordpad", "charmap"):
+        elif kind in ("calculator", "notepad", "charmap"):
             possessor.open_app(kind, note_index=1 if kind == "notepad" else 0)
         else:
             brain = None

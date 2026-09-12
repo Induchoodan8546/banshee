@@ -65,12 +65,10 @@ def run_house(*, possess_on_close: bool = False) -> str:
                         from banshee.voice_io import set_audio_mode
 
                         set_audio_mode(False)
-                        chat.add("banshee", "fine. text only.")
                     elif btn == "audio":
                         from banshee.voice_io import set_audio_mode
 
                         set_audio_mode(True)
-                        chat.add("banshee", "i'll hiss in your speakers.")
                     elif btn == "speak":
                         import threading
 

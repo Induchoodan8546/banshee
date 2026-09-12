@@ -5,7 +5,9 @@ from __future__ import annotations
 import ctypes
 import json
 import math
+import os
 import random
+import shutil
 import subprocess
 import threading
 import time
@@ -20,6 +22,33 @@ from banshee.config import (
     SAFE,
     WALLPAPER_SAVE,
 )
+
+def _exe_path(name: str) -> str | None:
+    found = shutil.which(name)
+    if found:
+        return found
+    windir = os.environ.get("WINDIR", r"C:\Windows")
+    for sub in ("System32", "SysWOW64"):
+        cand = os.path.join(windir, sub, name)
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
+def _spawn(args: list[str]) -> bool:
+    if not args:
+        return False
+    exe = _exe_path(args[0])
+    if not exe:
+        _log(f"skip missing app {args[0]}")
+        return False
+    try:
+        subprocess.Popen([exe, *args[1:]], close_fds=True)
+        return True
+    except FileNotFoundError:
+        _log(f"skip missing app {args[0]}")
+        return False
+
 
 NOTE_BODY = """now your system is mine.
 
@@ -390,7 +419,8 @@ def open_app(name: str = "notepad", note_index: int = 0) -> None:
                 encoding="utf-8",
             )
         args.append(str(path))
-    subprocess.Popen(args, close_fds=True)
+    if not _spawn(args):
+        return
     _wanted.add(key)
     _log(f"opened {key}")
 
@@ -402,7 +432,10 @@ def doodle_in_paint(mock_line: str = "") -> None:
         return
     paused = _cursor_locked
     stop_cursor_grab()
-    subprocess.Popen(["mspaint.exe"], close_fds=True)
+    if not _spawn(["mspaint.exe"]):
+        if paused or _cursor_locked:
+            start_cursor_grab()
+        return
     _wanted.add("paint")
     hwnd = 0
     for _ in range(60):
@@ -618,7 +651,7 @@ def reopen_missing() -> None:
             continue
         _log(f"{key} was closed — opening it again")
         if key == "paint":
-            subprocess.Popen(["mspaint.exe"], close_fds=True)
+            _spawn(["mspaint.exe"])
         else:
             open_app(key, note_index=1)
 

@@ -332,7 +332,6 @@ class Overlay:
         set_audio_mode(audio)
         if self._mode_hint is not None:
             self._mode_hint.config(text="mode: audio" if audio else "mode: text")
-        self.add("banshee", "i'll hiss in your speakers." if audio else "fine. text only.")
 
     def _listen(self) -> None:
         self._on_user_chat()
