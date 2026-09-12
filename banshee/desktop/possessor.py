@@ -108,17 +108,75 @@ def move_cursor(dx: int | None = None, dy: int | None = None) -> None:
         time.sleep(0.01)
 
 
-def open_search() -> None:
-    from banshee.config import SEARCH_URLS
+_SEARCH_FALLBACK = [
+    "why is my mouse possessed windows 11",
+    "can a cartoon ghost use google chrome",
+    "how to get a blob out of taskbar",
+    "is my wallpaper haunted",
+    "notepad opened itself help",
+    "paint drawing by itself windows",
+    "bazinga exorcism keyboard spell",
+    "why does calculator keep launching",
+    "desktop pet stole my cursor",
+    "do ghosts read window titles",
+    "remove poltergeist from mspaint",
+    "my computer is roasting me",
+    "how to stop a banshee on windows",
+    "why did chrome search for ghosts",
+    "floating white blob on monitor",
+    "is RAM a valid ghost habitat",
+    "task manager vs cartoon spirit",
+    "who keeps opening wikipedia randomly",
+    "cursor moving without me touching it",
+    "exorcise laptop with one word",
+]
+_used_queries: set[str] = set()
+
+
+def _clean_query(text: str) -> str:
+    import re
+
+    line = (text or "").replace("\n", " ").strip().strip("\"'`")
+    line = re.sub(r"https?://\S+", "", line)
+    line = re.sub(r"[^a-zA-Z0-9 '\-?]", " ", line)
+    line = " ".join(line.split())
+    if len(line) > 80:
+        line = line[:80].rsplit(" ", 1)[0]
+    return line
+
+
+def invent_search_query(title: str = "", brain=None) -> str:
+    q = ""
+    if brain is not None:
+        try:
+            raw = brain.chat(
+                "Invent a silly Google search a cartoon ghost would type. "
+                f"The human was just using: {title or 'the desktop'}. "
+                "Reply with ONLY 5 to 8 search words. No quotes. No URL. No extra sentences.",
+                remember=False,
+            )
+            q = _clean_query(raw)
+        except Exception:
+            q = ""
+    if len(q) < 4:
+        unused = [s for s in _SEARCH_FALLBACK if s not in _used_queries]
+        q = random.choice(unused or _SEARCH_FALLBACK)
+    _used_queries.add(q)
+    return q
+
+
+def open_search(title: str = "", brain=None) -> None:
+    import urllib.parse
     import webbrowser
 
-    url = random.choice(SEARCH_URLS)
+    query = invent_search_query(title, brain=brain)
+    url = "https://www.google.com/search?q=" + urllib.parse.quote_plus(query)
     if SAFE:
-        _log(f"would open search {url}")
+        _log(f"would search: {query}")
         return
     webbrowser.open(url)
     _wanted.add("browser")
-    _log("opened a haunted search")
+    _log(f"searched: {query}")
 
 
 def nudge_brief() -> None:

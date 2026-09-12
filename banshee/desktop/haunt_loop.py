@@ -13,7 +13,7 @@ from banshee.room.voice import Voice
 from banshee.system.banisher import Banisher
 
 
-def _mischief(stop: threading.Event, overlay: Overlay) -> None:
+def _mischief(stop: threading.Event, overlay: Overlay, voice: Voice) -> None:
     started = time.monotonic()
     locked = False
     time.sleep(0.7)
@@ -45,7 +45,10 @@ def _mischief(stop: threading.Event, overlay: Overlay) -> None:
         elif kind == "notepad":
             possessor.open_app("notepad", note_index=1)
         else:
-            possessor.open_search()
+            brain = None
+            if not voice.busy and not voice.talking_to_player():
+                brain = voice.brain
+            possessor.open_search(title=title, brain=brain)
         overlay.keep_front()
         gap = 2.1 - 1.2 * heat
         waited = 0.0
@@ -74,7 +77,7 @@ def run_possession() -> int:
     time.sleep(0.4)
     possessor.set_wallpaper()
 
-    mischief = threading.Thread(target=_mischief, args=(killer.hit, overlay), daemon=True)
+    mischief = threading.Thread(target=_mischief, args=(killer.hit, overlay, voice), daemon=True)
     mischief.start()
 
     voice.ask(
