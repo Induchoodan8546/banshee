@@ -1,4 +1,4 @@
-"""Always-on-top ghost. Click-through so the chat box stays usable."""
+"""Always-on-top ghost with a speech bubble, wandering the whole desktop."""
 
 from __future__ import annotations
 
@@ -23,6 +23,10 @@ SWP_NOMOVE = 0x0002
 SWP_NOSIZE = 0x0001
 SWP_NOACTIVATE = 0x0010
 SWP_SHOWWINDOW = 0x0040
+
+WIN_W = 240
+WIN_H = 250
+SPRITE = 120
 
 
 def _click_through(widget: tk.Misc) -> None:
@@ -57,25 +61,43 @@ def _click_through(widget: tk.Misc) -> None:
         pass
 
 
-class DesktopMascot:
-    SIZE = 168
+def _wrap(text: str, width: int = 24) -> list[str]:
+    words = text.replace("\n", " ").split()
+    lines: list[str] = []
+    cur = ""
+    for word in words:
+        trial = (cur + " " + word).strip()
+        if len(trial) > width and cur:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = trial
+    if cur:
+        lines.append(cur)
+    return lines[:3]
 
+
+class DesktopMascot:
     def __init__(self, root: tk.Tk) -> None:
         vx, vy, sw, sh = possessor.virtual_screen()
         if sw <= 1:
             sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
             vx, vy = 0, 0
         self.vx, self.vy, self.sw, self.sh = vx, vy, sw, sh
-        self.x = float(vx + sw * 0.35)
-        self.y = float(vy + sh * 0.28)
+        self.x = float(vx + sw * 0.4)
+        self.y = float(vy + sh * 0.3)
         self.tx, self.ty = self.x, self.y
+        self._speed = 2.4
         self._t = 0.0
         self._talk = 0.0
         self._blink = 0.0
-        self._next_blink = random.uniform(2.0, 4.0)
-        self._next_drift = time.monotonic() + 0.4
+        self._next_blink = random.uniform(1.6, 3.2)
+        self._next_drift = time.monotonic() + 0.2
+        self._line = ""
+        self._hold = 0.0
         self._photos: dict[str, ImageTk.PhotoImage] = {}
         self._kind = "body"
+        self._bubble_ids: list[int] = []
 
         win = tk.Toplevel(root)
         self.win = win
@@ -86,12 +108,12 @@ class DesktopMascot:
             win.wm_attributes("-transparentcolor", "#ff00ff")
         except tk.TclError:
             pass
-        win.geometry(f"{self.SIZE}x{self.SIZE}+{int(self.x)}+{int(self.y)}")
+        win.geometry(f"{WIN_W}x{WIN_H}+{int(self.x)}+{int(self.y)}")
 
         self.canvas = tk.Canvas(
             win,
-            width=self.SIZE,
-            height=self.SIZE,
+            width=WIN_W,
+            height=WIN_H,
             bg="#ff00ff",
             highlightthickness=0,
             bd=0,
@@ -99,8 +121,8 @@ class DesktopMascot:
         self.canvas.pack()
         self._load_frames()
         self._sprite = self.canvas.create_image(
-            self.SIZE // 2,
-            self.SIZE // 2 + 8,
+            WIN_W // 2,
+            WIN_H - 70,
             image=self._photos["body"],
         )
         win.update_idletasks()
@@ -114,11 +136,22 @@ class DesktopMascot:
         ):
             path = ASSETS_GHOST / file
             im = Image.open(path).convert("RGBA")
-            im = im.resize((120, 120), Image.Resampling.NEAREST)
+            im = im.resize((SPRITE, SPRITE), Image.Resampling.NEAREST)
             self._photos[name] = ImageTk.PhotoImage(im)
 
-    def talk(self) -> None:
-        self._talk = 2.8
+    def talk(self, text: str = "") -> None:
+        self._talk = 3.0
+        if text:
+            self.say(text)
+
+    def say(self, text: str, hold: float | None = None) -> None:
+        text = (text or "").replace("\n", " ").strip()
+        if not text or text == "...":
+            return
+        self._line = text
+        self._talk = max(self._talk, 2.0)
+        self._hold = hold if hold is not None else max(5.0, min(10.0, 1.8 + len(text) * 0.08))
+        self._draw_bubble()
 
     def pin(self) -> None:
         try:
@@ -133,52 +166,109 @@ class DesktopMascot:
         self._next_blink -= dt
         if self._next_blink <= 0:
             self._blink = 0.12
-            self._next_blink = random.uniform(2.0, 4.0)
+            self._next_blink = random.uniform(1.5, 3.0)
         if self._blink > 0:
             self._blink -= dt
         if self._talk > 0:
             self._talk -= dt
+        if self._hold > 0:
+            self._hold -= dt
+            if self._hold <= 0:
+                self._line = ""
+                self._clear_bubble()
 
         if now >= self._next_drift:
             self._pick_target()
-            self._next_drift = now + random.uniform(1.2, 2.2)
+            self._next_drift = now + random.uniform(0.7, 1.4)
 
-        self.x += (self.tx - self.x) * min(1.0, dt * 1.8)
-        self.y += (self.ty - self.y) * min(1.0, dt * 1.8)
-        bob = math.sin(self._t * 2.3) * 6.0
+        k = min(1.0, dt * self._speed)
+        self.x += (self.tx - self.x) * k
+        self.y += (self.ty - self.y) * k
+        bob = math.sin(self._t * 2.6) * 8.0
 
         chat_x = self.vx + self.sw - 300
-        chat_y = self.vy + self.sh - 220
+        chat_y = self.vy + self.sh - 230
         x = int(self.x)
         y = int(self.y + bob)
-        x = max(self.vx, min(self.vx + self.sw - self.SIZE, x))
-        y = max(self.vy, min(self.vy + self.sh - self.SIZE - 40, y))
-        if x > chat_x - 20 and y > chat_y - 20:
-            x = int(chat_x - self.SIZE - 12)
+        x = max(self.vx, min(self.vx + self.sw - WIN_W, x))
+        y = max(self.vy, min(self.vy + self.sh - WIN_H - 36, y))
+        if x + WIN_W > chat_x and y + WIN_H > chat_y:
+            x = int(chat_x - WIN_W - 8)
 
         try:
-            self.win.geometry(f"{self.SIZE}x{self.SIZE}+{x}+{y}")
+            self.win.geometry(f"{WIN_W}x{WIN_H}+{x}+{y}")
             kind = "body"
             if self._blink > 0:
                 kind = "blink"
-            elif self._talk > 0:
+            elif self._talk > 0 or self._hold > 0:
                 kind = "talk"
             if kind != self._kind:
                 self._kind = kind
                 self.canvas.itemconfigure(self._sprite, image=self._photos[kind])
-            self.canvas.coords(self._sprite, self.SIZE // 2, self.SIZE // 2 + 8)
+            gy = WIN_H - 70 + math.sin(self._t * 3.5) * 3
+            self.canvas.coords(self._sprite, WIN_W // 2, gy)
         except tk.TclError:
             pass
         self.pin()
 
+    def _draw_bubble(self) -> None:
+        self._clear_bubble()
+        if not self._line:
+            return
+        lines = _wrap(self._line)
+        if not lines:
+            return
+        pad = 8
+        line_h = 16
+        bw = min(WIN_W - 12, max(len(s) for s in lines) * 8 + pad * 2)
+        bh = len(lines) * line_h + pad * 2
+        x0 = (WIN_W - bw) // 2
+        y0 = 8
+        box = self.canvas.create_rectangle(
+            x0, y0, x0 + bw, y0 + bh,
+            fill="#f8f0ff",
+            outline="#baa0d6",
+            width=2,
+        )
+        tip = self.canvas.create_polygon(
+            WIN_W // 2 - 7, y0 + bh,
+            WIN_W // 2 + 7, y0 + bh,
+            WIN_W // 2, y0 + bh + 8,
+            fill="#f8f0ff",
+            outline="#baa0d6",
+        )
+        self._bubble_ids = [box, tip]
+        for i, line in enumerate(lines):
+            tid = self.canvas.create_text(
+                WIN_W // 2,
+                y0 + pad + i * line_h + 6,
+                text=line,
+                fill="#1c122a",
+                font=("Consolas", 9),
+            )
+            self._bubble_ids.append(tid)
+
+    def _clear_bubble(self) -> None:
+        for item in self._bubble_ids:
+            try:
+                self.canvas.delete(item)
+            except tk.TclError:
+                pass
+        self._bubble_ids = []
+
     def _pick_target(self) -> None:
-        if random.random() < 0.25:
+        roll = random.random()
+        if roll < 0.3:
             try:
                 mx, my = possessor._cursor()
-                self.tx = mx - self.SIZE / 2
-                self.ty = my - self.SIZE / 2
+                self.tx = mx - WIN_W / 2
+                self.ty = my - WIN_H / 2
+                self._speed = random.uniform(3.0, 5.5)
                 return
             except Exception:
                 pass
-        self.tx = random.uniform(self.vx + 10, self.vx + self.sw - self.SIZE - 10)
-        self.ty = random.uniform(self.vy + 10, self.vy + self.sh - self.SIZE - 80)
+        self.tx = random.uniform(self.vx + 8, self.vx + max(40, self.sw - WIN_W - 8))
+        self.ty = random.uniform(self.vy + 8, self.vy + max(40, self.sh - WIN_H - 70))
+        self._speed = random.uniform(2.2, 4.8)
+        if roll > 0.85:
+            self._speed = 7.0

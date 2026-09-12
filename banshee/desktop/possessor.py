@@ -70,6 +70,7 @@ def _set_cursor(x: int, y: int) -> None:
 
 _grab: threading.Event | None = None
 _grab_thread: threading.Thread | None = None
+_safe_zone = None  # callable -> (x0,y0,x1,y1) or None; cursor grab skips this box
 
 
 def _screen() -> tuple[int, int]:
@@ -120,14 +121,30 @@ def nudge_brief() -> None:
     move_cursor()
 
 
+def set_cursor_safe_zone(fn) -> None:
+    """Chat box screen rect. Grab loop will not move the pointer inside it."""
+    global _safe_zone
+    _safe_zone = fn
+
+
+def _in_safe_zone(x: int, y: int) -> bool:
+    fn = _safe_zone
+    if fn is None:
+        return False
+    try:
+        box = fn()
+    except Exception:
+        return False
+    if not box:
+        return False
+    x0, y0, x1, y1 = box
+    pad = 8
+    return (x0 - pad) <= x <= (x1 + pad) and (y0 - pad) <= y <= (y1 + pad)
+
+
 def possess_cursor_burst(seconds: float = 2.4, on_end=None, overlay=None) -> None:
-    """Do not steal the mouse for chatting — hand it to the text box."""
-    stop_cursor_grab()
-    if overlay is not None:
-        overlay.seize_input()
-        _log("cursor given to chat box")
-    else:
-        start_cursor_grab()
+    """Brief cursor haunt. Never drags the pointer into the chat box."""
+    start_cursor_grab()
 
     def _release() -> None:
         stop_cursor_grab()
@@ -179,17 +196,21 @@ def _cursor_loop(stop: threading.Event) -> None:
             tx = max(20, min(sw - 20, tx + random.randint(-280, 280)))
             ty = max(20, min(sh - 20, ty + random.randint(-180, 180)))
         cx, cy = _cursor()
-        # yank back if the human fought the pointer
+        if _in_safe_zone(cx, cy):
+            time.sleep(0.016)
+            continue
         pull = 0.35
         tx = tx + (cx - tx) * 0.04
         x = cx + (tx - cx) * pull + math.cos(angle) * speed
         y = cy + (ty - cy) * pull + math.sin(angle) * speed
         x = max(2, min(sw - 3, x))
         y = max(2, min(sh - 3, y))
-        # keep panic corner reachable: never park in 0,0 ourselves
         if x < 28 and y < 28:
             x, y = 80, 80
             tx, ty = sw * 0.5, sh * 0.5
+        if _in_safe_zone(int(x), int(y)):
+            time.sleep(0.016)
+            continue
         _set_cursor(x, y)
         time.sleep(0.016)
 

@@ -18,18 +18,14 @@ def _mischief(stop: threading.Event, overlay: Overlay) -> None:
     while not stop.is_set():
         roll = random.random()
         if roll < 0.42:
-            possessor.possess_cursor_burst(
-                random.uniform(2.0, 2.8),
-                overlay=overlay,
-                on_end=overlay.release_input,
-            )
+            possessor.possess_cursor_burst(random.uniform(2.0, 2.8))
         elif roll < 0.78:
             name = random.choice(["notepad", "calculator", "paint"])
             possessor.open_app(name, note_index=random.randint(0, 4))
-            overlay.seize_input()
+            overlay.keep_front()
         else:
             possessor.open_search()
-            overlay.seize_input()
+            overlay.keep_front()
         waited = 0.0
         gap = random.uniform(5.0, 6.5)
         while waited < gap and not stop.is_set():

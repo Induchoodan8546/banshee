@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import random
 import time
 import tkinter as tk
 from tkinter import font as tkfont
 
 from banshee.config import KILL_SPELL
+from banshee.desktop import monitor
 from banshee.desktop.mascot import DesktopMascot
 from banshee.room.voice import Voice
 from banshee.system.banisher import Banisher
@@ -24,7 +26,8 @@ class Overlay:
         self.killer: Banisher | None = None
         self.mascot: DesktopMascot | None = None
         self._alive = True
-        self._hold_focus_until = 0.0
+        self._next_ambient = 0.0
+        self._chat_box = (0, 0, 0, 0)
 
     def attach(self, voice: Voice, killer: Banisher) -> None:
         self.voice = voice
@@ -68,11 +71,17 @@ class Overlay:
             pass
 
     def seize_input(self) -> None:
-        self._hold_focus_until = time.monotonic() + 4.0
-        self._on_ui(lambda: self._focus_chat(hard=True))
+        """Chat is independent of possession — only keep it on top."""
+        self.keep_front()
 
     def release_input(self) -> None:
-        self._on_ui(self._pin_chat)
+        self.keep_front()
+
+    def chat_screen_rect(self) -> tuple[int, int, int, int] | None:
+        box = self._chat_box
+        if box[2] <= box[0]:
+            return None
+        return box
 
     def keep_front(self) -> None:
         def _go() -> None:
@@ -97,6 +106,9 @@ class Overlay:
         assert self._root is not None
         self.mascot = DesktopMascot(self._root)
         self.add("banshee", "now your system is mine. type here.")
+        from banshee.desktop import possessor as _pos
+
+        _pos.set_cursor_safe_zone(self.chat_screen_rect)
         self._root.after(30, self._tick)
         self._root.mainloop()
 
@@ -108,17 +120,37 @@ class Overlay:
             self.stop()
             return
         if self.voice is not None:
+            if self.voice.busy:
+                live = self.voice.snapshot()
+                if live and self.mascot is not None:
+                    self.mascot.say(live, hold=2.5)
             line = self.voice.poll()
             if line:
                 self.add("banshee", line)
                 if self.mascot is not None:
+                    self.mascot.say(line)
                     self.mascot.talk()
+            now = time.monotonic()
+            if (
+                now >= self._next_ambient
+                and not self.voice.talking_to_player()
+                and not self.voice.pending_work()
+            ):
+                title = monitor.foreground_title() or "the desktop"
+                self.voice.ask(
+                    f"you are a blob on the real desktop. the front window is: {title}. "
+                    "one short in-character line. use spaces.",
+                    activity=f"foreground: {title}",
+                    kind="ambient",
+                )
+                self._next_ambient = now + random.uniform(6.0, 9.0)
         if self.mascot is not None:
             self.mascot.step()
-        if time.monotonic() < self._hold_focus_until:
-            self._focus_chat(hard=False)
-        else:
+        self._remember_chat_rect()
+        now = time.monotonic()
+        if now - getattr(self, "_last_pin", 0) > 0.45:
             self._pin_chat()
+            self._last_pin = now
         root.after(33, self._tick)
 
     def _build(self) -> None:
@@ -231,14 +263,27 @@ class Overlay:
         except tk.TclError:
             pass
 
+    def _remember_chat_rect(self) -> None:
+        chat = self._chat
+        if chat is None:
+            return
+        try:
+            chat.update_idletasks()
+            x0 = int(chat.winfo_rootx())
+            y0 = int(chat.winfo_rooty())
+            self._chat_box = (x0, y0, x0 + int(chat.winfo_width()), y0 + int(chat.winfo_height()))
+        except tk.TclError:
+            pass
+
     def _pin_chat(self) -> None:
         chat = self._chat
         if chat is None or not self._alive:
             return
         try:
-            chat.deiconify()
             chat.attributes("-topmost", True)
-            chat.lift()
+            typing = self._entry is not None and chat.focus_get() is self._entry
+            if not typing:
+                chat.lift()
         except tk.TclError:
             pass
 
