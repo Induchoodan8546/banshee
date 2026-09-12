@@ -152,6 +152,10 @@ class DesktopMascot:
         self._talk = max(self._talk, 2.0)
         self._hold = hold if hold is not None else max(7.5, min(14.0, 3.0 + len(text) * 0.12))
         self._draw_bubble()
+        if hold is None or hold >= 5.0:
+            from banshee.voice_io import maybe_speak
+
+            maybe_speak(text)
 
     def pin(self) -> None:
         try:

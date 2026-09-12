@@ -1,16 +1,18 @@
-"""Blob TTS + user mic. Text chat stays; audio is a mode on top."""
+"""Blob TTS + user mic. Windows SAPI is re-created per line so it keeps speaking."""
 
 from __future__ import annotations
 
 import queue
 import threading
-import xml.sax.saxutils as xml
+import time
 
 audio_mode = False
 _listening = False
 _q: queue.Queue[str | None] = queue.Queue()
 _worker_started = False
 _lock = threading.Lock()
+_last_spoken = ""
+_last_t = 0.0
 
 
 def set_audio_mode(on: bool) -> None:
@@ -24,9 +26,15 @@ def maybe_speak(text: str) -> None:
 
 
 def speak(text: str) -> None:
+    global _last_spoken, _last_t
     text = (text or "").replace("\n", " ").strip()
-    if not text:
+    if not text or text == "...":
         return
+    now = time.monotonic()
+    if text == _last_spoken and now - _last_t < 1.8:
+        return
+    _last_spoken = text
+    _last_t = now
     _ensure_worker()
     _q.put(text)
 
@@ -40,49 +48,55 @@ def _ensure_worker() -> None:
         threading.Thread(target=_speaker_loop, daemon=True).start()
 
 
-def _speaker_loop() -> None:
+def _speak_one(text: str) -> None:
+    # Fresh engine every line — reuse dies after the first utterance on Windows.
     try:
-        import pyttsx3
-    except ImportError:
-        print("[banshee] pyttsx3 missing — pip install pyttsx3", flush=True)
+        import win32com.client
+
+        voice = win32com.client.Dispatch("SAPI.SpVoice")
+        voice.Rate = -4
+        voice.Volume = 100
+        voice.Speak(text)
         return
-    engine = pyttsx3.init()
-    engine.setProperty("rate", 108)
-    engine.setProperty("volume", 0.95)
-    try:
-        voices = engine.getProperty("voices") or []
-        pick = None
-        for v in voices:
-            name = (getattr(v, "name", "") or "").lower()
-            if any(s in name for s in ("david", "mark", "male", "george", "james")):
-                pick = v.id
-                break
-        if pick:
-            engine.setProperty("voice", pick)
     except Exception:
         pass
+    try:
+        import pyttsx3
+
+        engine = pyttsx3.init()
+        engine.setProperty("rate", 100)
+        engine.setProperty("volume", 1.0)
+        try:
+            for v in engine.getProperty("voices") or []:
+                name = (getattr(v, "name", "") or "").lower()
+                if any(s in name for s in ("david", "mark", "male", "george", "james", "zira")):
+                    engine.setProperty("voice", v.id)
+                    break
+        except Exception:
+            pass
+        engine.say(text)
+        engine.runAndWait()
+        try:
+            engine.stop()
+        except Exception:
+            pass
+        del engine
+    except Exception as exc:
+        print(f"[banshee] tts failed: {exc}", flush=True)
+
+
+def _speaker_loop() -> None:
     while True:
         text = _q.get()
         if text is None:
             break
-        payload = (
-            '<pitch absmiddle="-8"><rate speed="-6">'
-            + xml.escape(text)
-            + "</rate></pitch>"
-        )
         try:
-            engine.say(payload)
-            engine.runAndWait()
-        except Exception:
-            try:
-                engine.say(text)
-                engine.runAndWait()
-            except Exception as exc:
-                print(f"[banshee] tts failed: {exc}", flush=True)
+            _speak_one(text)
+        except Exception as exc:
+            print(f"[banshee] tts failed: {exc}", flush=True)
 
 
 def listen_once() -> str:
-    """Record one phrase. Empty string on failure."""
     global _listening
     if _listening:
         return ""

@@ -39,7 +39,13 @@ class Overlay:
 
     def add(self, who: str, text: str) -> None:
         text = (text or "").replace("\n", " ").strip()
-        if not text or self._log is None:
+        if not text:
+            return
+        if who == "banshee":
+            from banshee.voice_io import maybe_speak
+
+            maybe_speak(text)
+        if self._log is None:
             return
         prefix = "you: " if who == "you" else "banshee: "
         try:
@@ -49,10 +55,6 @@ class Overlay:
             self._log.configure(state="disabled")
         except tk.TclError:
             pass
-        if who == "banshee":
-            from banshee.voice_io import maybe_speak
-
-            maybe_speak(text)
 
     def set_line(self, text: str) -> None:
         self.add("banshee", text)
