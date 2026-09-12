@@ -35,9 +35,9 @@ class ChatDock:
         self.log.append((who, text))
         self.log = self.log[-5:]
         if who == "banshee":
-            from banshee.voice_io import maybe_speak
+            from banshee.voice_io import finish
 
-            maybe_speak(text)
+            finish(text)
 
     def _btn_rects(self) -> dict[str, pygame.Rect]:
         y = ROOM_H + 4

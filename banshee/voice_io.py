@@ -1,18 +1,20 @@
-"""Blob TTS + user mic. Windows SAPI is re-created per line so it keeps speaking."""
+"""Blob TTS + user mic. Speaks as the text streams in, like a person."""
 
 from __future__ import annotations
 
 import queue
 import threading
-import time
+import xml.sax.saxutils as xml
 
 audio_mode = False
 _listening = False
-_q: queue.Queue[str | None] = queue.Queue()
+_q: queue.Queue[tuple[str, str] | None] = queue.Queue()
 _worker_started = False
 _lock = threading.Lock()
-_last_spoken = ""
-_last_t = 0.0
+
+_SVS_ASYNC = 1
+_SVS_PURGE = 2
+_SVS_ISXML = 8
 
 
 def set_audio_mode(on: bool) -> None:
@@ -21,22 +23,32 @@ def set_audio_mode(on: bool) -> None:
 
 
 def maybe_speak(text: str) -> None:
+    """Finish the current line (room/desktop final text)."""
     if audio_mode:
-        speak(text)
+        finish(text)
+
+
+def feed(partial: str) -> None:
+    """Speak new complete words as the bubble fills."""
+    if audio_mode:
+        _put("feed", partial)
+
+
+def finish(text: str) -> None:
+    if audio_mode:
+        _put("finish", text)
 
 
 def speak(text: str) -> None:
-    global _last_spoken, _last_t
+    finish(text)
+
+
+def _put(kind: str, text: str) -> None:
     text = (text or "").replace("\n", " ").strip()
     if not text or text == "...":
         return
-    now = time.monotonic()
-    if text == _last_spoken and now - _last_t < 1.8:
-        return
-    _last_spoken = text
-    _last_t = now
     _ensure_worker()
-    _q.put(text)
+    _q.put((kind, text))
 
 
 def _ensure_worker() -> None:
@@ -48,52 +60,63 @@ def _ensure_worker() -> None:
         threading.Thread(target=_speaker_loop, daemon=True).start()
 
 
-def _speak_one(text: str) -> None:
-    # Fresh engine every line — reuse dies after the first utterance on Windows.
+def _speaker_loop() -> None:
+    sapi = None
     try:
         import win32com.client
 
-        voice = win32com.client.Dispatch("SAPI.SpVoice")
-        voice.Rate = -4
-        voice.Volume = 100
-        voice.Speak(text)
-        return
-    except Exception:
-        pass
-    try:
-        import pyttsx3
-
-        engine = pyttsx3.init()
-        engine.setProperty("rate", 100)
-        engine.setProperty("volume", 1.0)
-        try:
-            for v in engine.getProperty("voices") or []:
-                name = (getattr(v, "name", "") or "").lower()
-                if any(s in name for s in ("david", "mark", "male", "george", "james", "zira")):
-                    engine.setProperty("voice", v.id)
-                    break
-        except Exception:
-            pass
-        engine.say(text)
-        engine.runAndWait()
-        try:
-            engine.stop()
-        except Exception:
-            pass
-        del engine
+        sapi = win32com.client.Dispatch("SAPI.SpVoice")
+        # 0 = normal person pace; a little lively, not rushed
+        sapi.Rate = 0
+        sapi.Volume = 100
     except Exception as exc:
-        print(f"[banshee] tts failed: {exc}", flush=True)
+        print(f"[banshee] tts init failed: {exc}", flush=True)
+        return
 
+    spoken = ""
 
-def _speaker_loop() -> None:
+    def _say(chunk: str, purge: bool) -> None:
+        if not chunk.strip():
+            return
+        # Higher pitch, normal English — chattering goblin, not a robot.
+        payload = "<pitch absmiddle='7'>" + xml.escape(chunk) + "</pitch>"
+        flags = _SVS_ASYNC | _SVS_ISXML
+        if purge:
+            flags |= _SVS_PURGE
+        sapi.Speak(payload, flags)
+
     while True:
-        text = _q.get()
-        if text is None:
+        item = _q.get()
+        if item is None:
             break
+        kind, text = item
         try:
-            _speak_one(text)
+            if kind == "feed":
+                if spoken and not text.startswith(spoken):
+                    spoken = ""
+                rest = text[len(spoken) :] if text.startswith(spoken) else text
+                if not rest:
+                    continue
+                if rest[-1].isspace() or rest[-1] in ".!?,;:":
+                    chunk = rest
+                elif " " in rest:
+                    chunk = rest.rsplit(" ", 1)[0] + " "
+                else:
+                    continue
+                _say(chunk, purge=not spoken)
+                spoken += chunk
+            elif kind == "finish":
+                if spoken and text.startswith(spoken):
+                    rest = text[len(spoken) :]
+                    purge = False
+                else:
+                    rest = text
+                    purge = True
+                _say(rest, purge=purge)
+                spoken = ""
         except Exception as exc:
             print(f"[banshee] tts failed: {exc}", flush=True)
+            spoken = ""
 
 
 def listen_once() -> str:
@@ -109,8 +132,8 @@ def listen_once() -> str:
     recog = sr.Recognizer()
     try:
         with sr.Microphone() as source:
-            recog.adjust_for_ambient_noise(source, duration=0.35)
-            audio = recog.listen(source, timeout=5, phrase_time_limit=7)
+            recog.adjust_for_ambient_noise(source, duration=0.25)
+            audio = recog.listen(source, timeout=5, phrase_time_limit=6)
         try:
             return (recog.recognize_google(audio) or "").strip()
         except Exception:

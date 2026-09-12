@@ -146,6 +146,9 @@ def run_house(*, possess_on_close: bool = False) -> str:
         if voice.busy:
             live = voice.snapshot()
             if live:
+                from banshee.voice_io import feed
+
+                feed(live)
                 bubble.set(live, final=False)
         line = voice.poll()
         if line:

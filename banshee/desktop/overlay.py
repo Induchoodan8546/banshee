@@ -42,9 +42,9 @@ class Overlay:
         if not text:
             return
         if who == "banshee":
-            from banshee.voice_io import maybe_speak
+            from banshee.voice_io import finish
 
-            maybe_speak(text)
+            finish(text)
         if self._log is None:
             return
         prefix = "you: " if who == "you" else "banshee: "
@@ -132,8 +132,12 @@ class Overlay:
         if self.voice is not None:
             if self.voice.busy:
                 live = self.voice.snapshot()
-                if live and self.mascot is not None:
-                    self.mascot.say(live, hold=2.5)
+                if live:
+                    from banshee.voice_io import feed
+
+                    feed(live)
+                    if self.mascot is not None:
+                        self.mascot.say(live, hold=2.5)
             line = self.voice.poll()
             if line:
                 self.add("banshee", line)
