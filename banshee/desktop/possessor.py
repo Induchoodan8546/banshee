@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import math
 import random
@@ -335,28 +336,128 @@ def open_app(name: str = "notepad", note_index: int = 0) -> None:
 
 
 def doodle_in_paint(mock_line: str = "") -> None:
-    """Open Paint and scribble with the real cursor. No pre-drawn blob."""
+    """Open Paint, wait for it, then drag-scribble on the canvas."""
     if SAFE:
         _log("would scribble in paint with the cursor")
         return
+    paused = _cursor_locked
+    stop_cursor_grab()
     subprocess.Popen(["mspaint.exe"], close_fds=True)
     _wanted.add("mspaint.exe")
-    time.sleep(1.1)
-    sw, sh = _screen()
-    x0 = sw // 2 - 90
-    y0 = sh // 2 - 20
-    _set_cursor(x0, y0)
-    time.sleep(0.08)
-    _user32().mouse_event(0x0002, 0, 0, 0, 0)
-    for i in range(48):
-        x = x0 + i * 7
-        y = y0 + int(36 * math.sin(i * 0.55)) + (12 if i % 4 == 0 else -10)
-        _set_cursor(x, y)
-        time.sleep(0.012)
-    _user32().mouse_event(0x0004, 0, 0, 0, 0)
+    hwnd = 0
+    for _ in range(50):
+        hwnd = _find_window("paint")
+        if hwnd:
+            break
+        time.sleep(0.12)
+    if not hwnd:
+        _log("paint window not found")
+        if paused:
+            start_cursor_grab()
+        return
+    _foreground(hwnd)
+    time.sleep(0.35)
+    rect = _window_rect(hwnd)
+    if not rect:
+        if paused:
+            start_cursor_grab()
+        return
+    left, top, right, bottom = rect
+    w, h = right - left, bottom - top
+    # skip ribbon: draw in the lower-middle canvas
+    x0 = left + int(w * 0.28)
+    y0 = top + int(h * 0.58)
+    _drag_scribble(x0, y0)
     _log("scribbled in paint")
-    if _cursor_locked:
+    if paused or _cursor_locked:
         start_cursor_grab()
+
+
+def _find_window(title_part: str) -> int:
+    user32 = _user32()
+    found: list[int] = []
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    def _cb(hwnd, _lparam):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        buf = ctypes.create_unicode_buffer(512)
+        user32.GetWindowTextW(hwnd, buf, 512)
+        title = buf.value.lower()
+        if title_part in title and "3d" not in title:
+            found.append(int(hwnd))
+        return True
+
+    cb = WNDENUMPROC(_cb)
+    user32.EnumWindows(cb, 0)
+    return found[0] if found else 0
+
+
+def _window_rect(hwnd: int) -> tuple[int, int, int, int] | None:
+    class RECT(ctypes.Structure):
+        _fields_ = [
+            ("left", ctypes.c_long),
+            ("top", ctypes.c_long),
+            ("right", ctypes.c_long),
+            ("bottom", ctypes.c_long),
+        ]
+
+    r = RECT()
+    if not _user32().GetWindowRect(hwnd, ctypes.byref(r)):
+        return None
+    return int(r.left), int(r.top), int(r.right), int(r.bottom)
+
+
+def _foreground(hwnd: int) -> None:
+    u = _user32()
+    u.ShowWindow(hwnd, 9)
+    u.keybd_event(0x12, 0, 0, 0)
+    u.SetForegroundWindow(hwnd)
+    u.keybd_event(0x12, 0, 2, 0)
+
+
+def _send_mouse(flags: int, x: int = 0, y: int = 0) -> None:
+    extra = ctypes.c_ulong(0)
+
+    class MOUSEINPUT(ctypes.Structure):
+        _fields_ = [
+            ("dx", ctypes.c_long),
+            ("dy", ctypes.c_long),
+            ("mouseData", ctypes.c_ulong),
+            ("dwFlags", ctypes.c_ulong),
+            ("time", ctypes.c_ulong),
+            ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+        ]
+
+    class INPUT(ctypes.Structure):
+        _fields_ = [("type", ctypes.c_ulong), ("mi", MOUSEINPUT)]
+
+    inp = INPUT()
+    inp.type = 0
+    inp.mi = MOUSEINPUT(x, y, 0, flags, 0, ctypes.pointer(extra))
+    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+
+
+def _move_abs(x: int, y: int) -> None:
+    sw, sh = _screen()
+    ax = int(x * 65535 / max(1, sw - 1))
+    ay = int(y * 65535 / max(1, sh - 1))
+    _set_cursor(x, y)
+    _send_mouse(0x0001 | 0x8000, ax, ay)  # MOVE | ABSOLUTE
+
+
+def _drag_scribble(x0: int, y0: int) -> None:
+    _move_abs(x0, y0)
+    time.sleep(0.08)
+    _send_mouse(0x0002)  # LEFTDOWN
+    time.sleep(0.04)
+    for i in range(56):
+        x = x0 + i * 6
+        y = y0 + int(28 * math.sin(i * 0.7)) + (18 if i % 5 == 0 else -14)
+        _move_abs(x, y)
+        time.sleep(0.016)
+    _send_mouse(0x0004)  # LEFTUP
+    time.sleep(0.05)
 
 
 def _is_running(exe: str) -> bool:
